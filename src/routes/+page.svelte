@@ -1,308 +1,292 @@
 <script>
-	import { createEventDispatcher } from 'svelte';
-	import ModalReport from './ModalIncidentReport.svelte';
-	import { page } from '$app/stores';
-	import {
-		IconFlag,
-		IconFlagFilled,
-		IconKeyFilled,
-		IconClockPin,
-		IconClockPause,
-		IconClockPlay,
-		IconClockStop,
-		IconCircleCheckFilled,
-		IconAlertTriangle
-	} from '@tabler/icons-svelte';
+import { ref, push, set, update, query, orderByChild, equalTo, get } from "$lib/firebase";
+import { db } from "$lib/firebase";
+import { onMount } from 'svelte';
+import { format } from 'date-fns';
+import {
+    IconClockPin, IconClockPause, IconClockPlay, IconClockStop,
+    IconAlertTriangle, IconActivity, IconClock
+} from "@tabler/icons-svelte";
 
-	export let user;
+let isProcessing = false;
+let cameraStream = null;
+let capturedImage = null;
+let status = 'none'; 
+let currentShiftId = null;
+let checkInTime = null;
+let currentTime = new Date();
+let timerInterval;
 
-	const dispatch = createEventDispatcher();
-	let reportModalOpen = false;
-	
-	let locationData = null;
-	let deviceInfo = null;
-	let cameraStream = null;
-	let isProcessing = false;
+const USER_PATH = 'attendance/anonymous';
 
-	function close() {
-		dispatch('close');
-	}
+// Update time every second
+onMount(() => {
+    loadActiveShift();
+    timerInterval = setInterval(() => currentTime = new Date(), 1000);
+    return () => clearInterval(timerInterval);
+});
 
-	function openReportModal(event) {
-		event.stopPropagation();
-		reportModalOpen = true;
-	}
+// Device info
+async function getDeviceInfo() {
+    const ua = navigator.userAgent;
+    const platform = navigator.platform;
+    let name = 'Unknown', version = 'Unknown';
+    if (ua.includes('Chrome')) name='Chrome', version=(ua.match(/Chrome\/([\d.]+)/)||[])[1]||'Unknown';
+    else if (ua.includes('Firefox')) name='Firefox', version=(ua.match(/Firefox\/([\d.]+)/)||[])[1]||'Unknown';
+    else if (ua.includes('Safari')) name='Safari', version=(ua.match(/Version\/([\d.]+)/)||[])[1]||'Unknown';
+    return { browser:`${name} ${version}`, device: platform, userAgent: ua, timestamp:new Date().toISOString() };
+}
 
-	function closeReportModal() {
-		reportModalOpen = false;
-	}
+// Get coordinates
+async function getLocation() {
+    return new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(pos => {
+            resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy, timestamp: new Date(pos.timestamp).toISOString() });
+        }, reject, { enableHighAccuracy: true, timeout: 10000 });
+    });
+}
 
-	// Get device information
-	function getDeviceInfo() {
-		const userAgent = navigator.userAgent;
-		const platform = navigator.platform;
-		
-		// Parse browser info
-		let browserName = 'Unknown';
-		let browserVersion = 'Unknown';
-		
-		if (userAgent.indexOf('Chrome') > -1) {
-			browserName = 'Google Chrome';
-			const match = userAgent.match(/Chrome\/(\d+\.\d+)/);
-			browserVersion = match ? match[1] : 'Unknown';
-		} else if (userAgent.indexOf('Firefox') > -1) {
-			browserName = 'Mozilla Firefox';
-			const match = userAgent.match(/Firefox\/(\d+\.\d+)/);
-			browserVersion = match ? match[1] : 'Unknown';
-		} else if (userAgent.indexOf('Safari') > -1) {
-			browserName = 'Safari';
-			const match = userAgent.match(/Version\/(\d+\.\d+)/);
-			browserVersion = match ? match[1] : 'Unknown';
-		}
-		
-		// Detect device type
-		let deviceType = 'Desktop';
-		let deviceName = platform;
-		
-		if (/Android/i.test(userAgent)) {
-			deviceType = 'Android';
-			const match = userAgent.match(/Android\s+([\d.]+)/);
-			const androidVersion = match ? match[1] : 'Unknown';
-			
-			// Try to extract device model
-			const modelMatch = userAgent.match(/\(([^)]+)\)/);
-			if (modelMatch) {
-				const parts = modelMatch[1].split(';');
-				deviceName = parts[parts.length - 1].trim() || 'Android Device';
-			}
-		} else if (/iPhone|iPad|iPod/i.test(userAgent)) {
-			deviceType = 'iOS';
-			deviceName = /iPhone/i.test(userAgent) ? 'iPhone' : /iPad/i.test(userAgent) ? 'iPad' : 'iPod';
-		}
-		
-		return {
-			browser: `${browserName} version ${browserVersion}`,
-			device: deviceName,
-			platform: platform,
-			userAgent: userAgent,
-			timestamp: new Date().toISOString()
-		};
-	}
+// Reverse geocode to name
+async function getLocationName(lat, lng) {
+    try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
+        if (!res.ok) throw new Error('Failed to fetch location');
+        const data = await res.json();
+        const city = data.address.city || data.address.town || data.address.village || data.display_name;
+        const brgy = data.address.suburb || data.address.neighbourhood || data.address.quarter || '';
+        return brgy ? `${city}, ${brgy}` : city;
+    } catch {
+        return 'Unknown Location';
+    }
+}
 
-	// Get location data
-	async function getLocation() {
-		return new Promise((resolve, reject) => {
-			if (!navigator.geolocation) {
-				reject(new Error('Geolocation is not supported by this browser'));
-				return;
-			}
+// Capture camera image
+async function captureImage() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user' } });
+        cameraStream = stream;
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        await new Promise(r=>video.onloadedmetadata=()=>{video.play(); r();});
+        const canvas=document.createElement('canvas');
+        canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+        canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+        const image=canvas.toDataURL('image/jpeg',0.8);
+        cameraStream.getTracks().forEach(t=>t.stop());
+        cameraStream=null;
+        return image;
+    } catch(err){ console.error(err); return null; }
+}
 
-			navigator.geolocation.getCurrentPosition(
-				(position) => {
-					resolve({
-						latitude: position.coords.latitude,
-						longitude: position.coords.longitude,
-						accuracy: position.coords.accuracy,
-						timestamp: new Date(position.timestamp).toISOString()
-					});
-				},
-				(error) => {
-					reject(error);
-				},
-				{
-					enableHighAccuracy: true,
-					timeout: 10000,
-					maximumAge: 0
-				}
-			);
-		});
-	}
+// Load active shift
+async function loadActiveShift() {
+    try {
+        const today = new Date().toDateString();
+        const attendanceRef = ref(db, USER_PATH);
+        const q = query(attendanceRef, orderByChild('date'), equalTo(today));
+        const snapshot = await get(q);
+        if (snapshot.exists()) {
+            let lastShift = null;
+            snapshot.forEach(childSnapshot => {
+                const shift = childSnapshot.val();
+                if (shift.currentStatus !== 'checkedOut') {
+                    lastShift = { key: childSnapshot.key, status: shift.currentStatus, checkIn: shift.checkIn };
+                }
+            });
+            if (lastShift) {
+                currentShiftId = lastShift.key;
+                status = lastShift.status;
+                if (lastShift.checkIn?.timestamp) checkInTime = new Date(lastShift.checkIn.timestamp);
+                if (lastShift.checkIn?.capturedImage) capturedImage = lastShift.checkIn.capturedImage;
+            }
+        }
+    } catch(err) { console.error("Error loading active shift:", err); }
+}
 
-	// Get camera access and extract metadata
-	async function getCameraAccess() {
-		try {
-			const stream = await navigator.mediaDevices.getUserMedia({
-				video: { facingMode: 'user' }
-			});
-			
-			// Store stream reference
-			cameraStream = stream;
-			
-			// Get video track settings
-			const videoTrack = stream.getVideoTracks()[0];
-			const settings = videoTrack.getSettings();
-			
-			return {
-				deviceId: settings.deviceId,
-				width: settings.width,
-				height: settings.height,
-				facingMode: settings.facingMode,
-				aspectRatio: settings.aspectRatio
-			};
-		} catch (error) {
-			console.error('Camera access error:', error);
-			throw error;
-		}
-	}
+// Log attendance
+async function logAttendance(action) {
+    if (isProcessing) return;
+    isProcessing = true;
+    try {
+        const device = await getDeviceInfo();
+        const coords = await getLocation();
+        const locationName = await getLocationName(coords.latitude, coords.longitude);
+        const image = await captureImage();
+        if (!image) throw new Error("Could not capture image");
 
-	// Handle check-in with metadata extraction
-	async function handleCheckIn() {
-		if (isProcessing) return;
-		
-		isProcessing = true;
-		
-		try {
-			// Get device info
-			deviceInfo = getDeviceInfo();
-			console.log('Device Info:', deviceInfo);
-			
-			// Request location permission
-			locationData = await getLocation();
-			console.log('Location Data:', locationData);
-			
-			// Request camera permission
-			const cameraInfo = await getCameraAccess();
-			console.log('Camera Info:', cameraInfo);
-			
-			// Prepare check-in data
-			const checkInData = {
-				userId: user?.id,
-				userName: user?.fullName,
-				timestamp: new Date().toISOString(),
-				location: locationData,
-				device: deviceInfo,
-				camera: cameraInfo
-			};
-			
-			console.log('Check-in Data:', checkInData);
-			
-			// Here you would send this data to your backend
-			// await fetch('/api/checkin', { 
-			//   method: 'POST', 
-			//   headers: { 'Content-Type': 'application/json' },
-			//   body: JSON.stringify(checkInData) 
-			// });
-			
-			alert('Check-in successful! Metadata captured.');
-			
-			// Stop camera stream after successful check-in
-			if (cameraStream) {
-				cameraStream.getTracks().forEach(track => track.stop());
-				cameraStream = null;
-			}
-			
-		} catch (error) {
-			console.error('Check-in error:', error);
-			alert(`Error during check-in: ${error.message}`);
-		} finally {
-			isProcessing = false;
-		}
-	}
+        const newActionData = {
+            timestamp: new Date().toISOString(),
+            location: { ...coords, name: locationName },
+            device,
+            capturedImage: image
+        };
+        capturedImage = image;
+
+        let entryRef, shouldReload = false;
+
+        if(action === 'checkIn') {
+            if (status !== 'none') throw new Error("Already checked in or on break.");
+            status = 'checkedIn';
+            entryRef = push(ref(db, USER_PATH));
+            currentShiftId = entryRef.key;
+            checkInTime = new Date();
+            await set(entryRef, { checkIn: newActionData, currentStatus: 'checkedIn', date: new Date().toDateString() });
+        } else {
+            if (!currentShiftId) throw new Error("Cannot perform action. Please Check In first.");
+            entryRef = ref(db, `${USER_PATH}/${currentShiftId}`);
+            let updateData = {};
+            if(action==='breakIn') { if (status!=='checkedIn') throw new Error("Must be checked in to start break."); status='onBreak'; updateData={ currentStatus:'onBreak', breakIn:newActionData }; }
+            else if(action==='breakOut') { if (status!=='onBreak') throw new Error("Must be on break to end break."); status='checkedIn'; updateData={ currentStatus:'checkedIn', breakOut:newActionData }; }
+            else if(action==='checkOut') { status='checkedOut'; updateData={ currentStatus:'checkedOut', checkOut:newActionData }; shouldReload=true; }
+            await update(entryRef, updateData);
+        }
+
+        alert(`${action} successful!`);
+        if (shouldReload) window.location.reload();
+    } catch(err){ console.error(err); alert(`Error: ${err.message}`); }
+    finally{ isProcessing = false; }
+}
+
+// Handlers
+const handleCheckIn = () => logAttendance("checkIn");
+const handleBreakIn = () => logAttendance("breakIn");
+const handleBreakOut = () => logAttendance("breakOut");
+const handleCheckOut = () => logAttendance("checkOut");
+
+// Shift duration
+$: timeOnShift = checkInTime ? currentTime.getTime() - checkInTime.getTime() : 0;
+function formatDuration(ms) {
+    if (!ms || ms<0) return '00:00:00';
+    const totalSeconds = Math.floor(ms/1000);
+    const hours=Math.floor(totalSeconds/3600);
+    const minutes=Math.floor((totalSeconds%3600)/60);
+    const seconds=totalSeconds%60;
+    const pad = n=>n.toString().padStart(2,'0');
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
 </script>
 
-<div
-	role="button"
-	tabindex="0"
-	on:click={() => {
-		close();
-	}}
-	on:keydown={(e) => {
-		if (e === 'Enter' || e === ' ') {
-			() => {
-				close();
-			};
-		}
-	}}
-	class="fixed inset-0 z-100 flex w-full items-center justify-center bg-black/30 px-2 py-4 backdrop-blur-sm lg:bottom-0"
->
-	<div class="max-w-lg rounded-lg bg-gray-100 p-4 shadow-lg">
-		<div class="mb-2 flex flex-row items-center gap-4 border-b border-b-gray-300 pb-2">
-			<img
-				src={user?.picture}
-				loading="lazy"
-				alt="profile"
-				class="h-12 w-12 rounded-full object-cover"
-			/>
-			<span class="mt-2">Hello, {user?.fullName}</span>
-		</div>
+<div class="p-8 bg-gray-50 min-h-screen">
+    <h1 class="text-3xl font-extrabold text-gray-800 mb-6">Attendance Overview</h1>
+    <a href="app/dashboard" class="text-indigo-600 hover:underline mb-4 inline-block">← Back to Dashboard</a>
 
-		<div class="flex flex-col gap-4">
-			<div class="flex flex-col rounded bg-white p-2 shadow-lg">
-				<span class="flex flex-row items-center gap-2 text-gray-700"
-					><IconKeyFilled class="text-blue-600" />Remote Login</span
-				>
-				<div class="mt-2 text-sm text-gray-500">
-					Remote login is available to authorized roles only. Each login requires granting
-					<strong>Camera</strong> and <strong>Location Permissions</strong> at every check-in.
-				</div>
-				<div class="mt-4 flex flex-row justify-between gap-2">
-					<button
-						class="flex flex-1 flex-col items-center justify-center rounded bg-blue-500 p-2 text-white disabled:opacity-50"
-						on:click={handleCheckIn}
-						disabled={isProcessing}
-					>
-						<IconClockPin />
-						<span class="mt-2 text-sm">{isProcessing ? 'Processing...' : 'Check In'}</span>
-					</button>
-					<button
-						class="flex flex-1 flex-col items-center justify-center rounded bg-gray-500 p-2 text-white"
-					>
-						<IconClockPause />
-						<span class="mt-2 text-sm">Start Break</span>
-					</button>
-					<button
-						class="flex flex-1 flex-col items-center justify-center rounded bg-gray-500 p-2 text-white"
-					>
-						<IconClockPlay />
-						<span class="mt-2 text-sm">End Break</span>
-					</button>
-					<button
-						class="flex flex-1 flex-col items-center justify-center rounded bg-gray-500 p-2 text-white"
-					>
-						<IconClockStop />
-						<span class="mt-2 text-sm">Check Out</span>
-					</button>
-				</div>
-			</div>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <!-- Current Time -->
+        <div class="bg-white p-6 rounded-xl shadow hover:shadow-lg transition duration-200 flex flex-col justify-between">
+            <div class="flex items-center mb-4">
+                <IconClock class="w-8 h-8 text-indigo-500 mr-3"/>
+                <div>
+                    <p class="text-sm text-gray-500">Current Time</p>
+                    <p class="text-2xl font-bold text-gray-900">{format(currentTime,'h:mm:ss a')}</p>
+                </div>
+            </div>
+            <p class="text-xs text-gray-400">{format(currentTime,'EEEE, MMM dd')}</p>
+        </div>
 
-			<div class="flex flex-col rounded bg-white p-2 shadow-lg">
-				<span class="flex flex-row items-center gap-2 text-gray-700"
-					><IconFlagFilled class="text-yellow-500" />Report an incident</span
-				>
-				<div class="mt-2 text-sm text-gray-500">
-					Submit incidents that disrupt work, prevent task completion, or involve violations of
-					company policies and regulations.
-				</div>
+        <!-- Status Card -->
+        <div class="p-6 rounded-xl shadow hover:shadow-lg transition duration-200"
+             class:bg-green-50={status==='checkedIn'}
+             class:bg-yellow-50={status==='onBreak'}
+             class:bg-gray-100={status==='none'||status==='checkedOut'}>
+            <div class="flex items-center mb-2">
+                <svelte:component
+                    this={status==='checkedIn'?IconActivity:(status==='onBreak'?IconAlertTriangle:IconClockStop)}
+                    class={`w-6 h-6 mr-2
+                        ${status==='checkedIn'?'text-green-600':''}
+                        ${status==='onBreak'?'text-yellow-600':''}
+                        ${status==='none'||status==='checkedOut'?'text-gray-500':''}`}
+                />
+                <p class="text-sm font-medium
+                    {status==='checkedIn'?'text-green-700':''}
+                    {status==='onBreak'?'text-yellow-700':''}
+                    {status==='none'||status==='checkedOut'?'text-gray-600':''}">Current Status</p>
+            </div>
+            <p class="text-3xl font-extrabold capitalize
+                {status==='checkedIn'?'text-green-800':''}
+                {status==='onBreak'?'text-yellow-800':''}
+                {status==='none'||status==='checkedOut'?'text-gray-800':''}">
+                {status==='none'?'Ready to Clock In':status}
+            </p>
+            {#if checkInTime}
+                <p class="text-sm text-gray-500 mt-1">Check In: {format(checkInTime,'h:mm a')}</p>
+            {/if}
+        </div>
 
-				<span class="mt-2 flex text-sm text-gray-700">You may also report anonymously.</span>
-				<button 
-					class="mt-2 flex w-full flex-row rounded-lg bg-yellow-500 p-2 text-white"
-					on:click={openReportModal}
-				>
-					<IconFlag />
-					<span class="mx-auto">Start Report</span>
-				</button>
-			</div>
+        <!-- Time on Shift -->
+        <div class="bg-white p-6 rounded-xl shadow hover:shadow-lg transition duration-200">
+            <p class="text-sm text-gray-500 mb-2">Time on Shift</p>
+            <p class="text-3xl font-extrabold text-indigo-700">{formatDuration(timeOnShift)}</p>
+        </div>
+    </div>
 
-			<div class="flex flex-col rounded bg-white p-2 shadow-lg">
-				<span class="flex flex-row items-center gap-2 text-gray-700"
-					><IconCircleCheckFilled class="text-green-600" />Security Check</span
-				>
-				<span class="mt-2 text-sm text-gray-500">
-					Your last login was on September 4, 2015, at 5:45:23 PM using Google Chrome for Android
-					version 21.25001.1 on a Samsung A20.
-				</span>
-				<span class="mt-2 flex text-sm text-gray-700">
-					If this information looks unfamiliar, please report it to the MIS Department.
-				</span>
-				<button class="mt-2 flex w-full flex-row rounded-lg bg-red-600 p-2 text-white">
-					<IconAlertTriangle />
-					<span class="mx-auto">Report Suspicious Activity</span>
-				</button>
-			</div>
-		</div>
-	</div>
+    <!-- Action Center -->
+    <div class="bg-white p-6 rounded-xl shadow hover:shadow-lg transition duration-200">
+        <h2 class="text-xl font-bold mb-6 border-b pb-3 flex items-center gap-2">📸 Action Center</h2>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Image Display -->
+            <div>
+                <p class="font-semibold text-gray-700 mb-3">
+                    {status==='none'?'Ready for Check-in Image':'Last Recorded Image'}
+                </p>
+                {#if capturedImage}
+                    <div class="p-4 border rounded-lg bg-green-50 border-green-300">
+                        <img src={capturedImage} alt="Captured Attendance" class="w-full h-auto rounded-md"/>
+                    </div>
+                {:else}
+                    <div class="p-8 border rounded-lg text-center text-gray-500 bg-gray-50 h-64 flex items-center justify-center">
+                        <p>{status==='none'?'Click "Check In" to capture image.':'Image loaded from active shift.'}</p>
+                    </div>
+                {/if}
+            </div>
+
+            <!-- Buttons -->
+            <div class="flex flex-col justify-center">
+                <div class="grid grid-cols-2 gap-4">
+                    <!-- Check In -->
+                    <button class="flex flex-col items-center justify-center rounded p-4 text-white font-semibold shadow-md transition-all duration-200 h-24"
+                        class:bg-indigo-600={status==='none'}
+                        class:hover:bg-indigo-700={status==='none'}
+                        class:bg-gray-400={isProcessing || status!=='none'}
+                        on:click={handleCheckIn}
+                        disabled={isProcessing || status!=='none'}>
+                        <IconClockPin class="w-6 h-6 mb-1"/>
+                        <span class="text-sm">{isProcessing?'Processing...':'Check In'}</span>
+                    </button>
+
+                    <!-- Start Break -->
+                    <button class="flex flex-col items-center justify-center rounded p-4 text-white font-semibold shadow-md transition-all duration-200 h-24"
+                        class:bg-yellow-500={status==='checkedIn'}
+                        class:hover:bg-yellow-600={status==='checkedIn'}
+                        class:bg-gray-400={isProcessing || status!=='checkedIn'}
+                        on:click={handleBreakIn}
+                        disabled={isProcessing || status!=='checkedIn'}>
+                        <IconClockPause class="w-6 h-6 mb-1"/>
+                        <span class="text-sm">Start Break</span>
+                    </button>
+
+                    <!-- End Break -->
+                    <button class="flex flex-col items-center justify-center rounded p-4 text-white font-semibold shadow-md transition-all duration-200 h-24"
+                        class:bg-green-600={status==='onBreak'}
+                        class:hover:bg-green-700={status==='onBreak'}
+                        class:bg-gray-400={isProcessing || status!=='onBreak'}
+                        on:click={handleBreakOut}
+                        disabled={isProcessing || status!=='onBreak'}>
+                        <IconClockPlay class="w-6 h-6 mb-1"/>
+                        <span class="text-sm">End Break</span>
+                    </button>
+
+                    <!-- Check Out -->
+                    <button class="flex flex-col items-center justify-center rounded p-4 text-white font-semibold shadow-md transition-all duration-200 h-24"
+                        class:bg-red-600={status==='checkedIn' || status==='onBreak'} 
+                        class:hover:bg-red-700={status==='checkedIn' || status==='onBreak'}
+                        class:bg-gray-400={isProcessing || (status!=='checkedIn' && status!=='onBreak')}
+                        on:click={handleCheckOut}
+                        disabled={isProcessing || (status!=='checkedIn' && status!=='onBreak')}>
+                        <IconClockStop class="w-6 h-6 mb-1"/>
+                        <span class="text-sm">Check Out</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
-
-<!-- Report Modal -->
-<ModalReport bind:open={reportModalOpen} on:close={closeReportModal} user={user} />
