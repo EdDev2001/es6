@@ -7,35 +7,32 @@ let adminAuth;
 
 if (!getApps().length) {
     if (!FIREBASE_SERVICE_ACCOUNT) {
-        console.error("❌ FIREBASE_SERVICE_ACCOUNT is undefined.");
-        throw new Error("FIREBASE_SERVICE_ACCOUNT environment variable is not set");
+        throw new Error("❌ FIREBASE_SERVICE_ACCOUNT environment variable is not set");
     }
 
     try {
-        // Remove outer quotes if they exist
+        // Remove outer quotes if present
         let jsonString = FIREBASE_SERVICE_ACCOUNT.trim();
         if (jsonString.startsWith('"') && jsonString.endsWith('"')) {
             jsonString = jsonString.slice(1, -1);
         }
 
-        // Parse the JSON
+        // Parse JSON
         const serviceAccount = JSON.parse(jsonString);
 
-        // Convert escaped newlines in private_key
+        // Fix escaped newlines in private_key
         if (serviceAccount.private_key) {
             serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
         }
 
-        initializeApp({
-            credential: cert(serviceAccount)
-        });
-
+        // Initialize Firebase Admin
+        initializeApp({ credential: cert(serviceAccount) });
         console.log("🔥 Firebase Admin initialized successfully");
+
         adminAuth = getAuth();
-    } catch (e) {
-        console.error("❌ Failed to initialize Firebase Admin:");
-        console.error("Error message:", e.message);
-        throw e;
+    } catch (err) {
+        console.error("❌ Failed to initialize Firebase Admin:", err.message);
+        throw err;
     }
 } else {
     adminAuth = getAuth();

@@ -1,9 +1,18 @@
 // src/lib/firebase.js
-import { initializeApp } from 'firebase/app';
-import { 
-  getDatabase, ref, push, set, get, query, orderByChild, equalTo, update, limitToLast 
+import { initializeApp, getApps } from 'firebase/app';
+import {
+  getDatabase,
+  ref as dbRef,
+  push as dbPush,
+  set as dbSet,
+  get as dbGet,
+  query as dbQuery,
+  orderByChild as dbOrderByChild,
+  equalTo as dbEqualTo,
+  update as dbUpdate,
+  limitToLast as dbLimitToLast
 } from 'firebase/database';
-import { 
+import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
@@ -11,31 +20,25 @@ import {
   onAuthStateChanged
 } from 'firebase/auth';
 
-// Firebase configuration
+// Firebase configuration using environment variables
 const firebaseConfig = {
-  apiKey: "AIzaSyDv2QU8otJoD5Y34CacDX5YjMuge_lbcts",
-  authDomain: "ednelback.firebaseapp.com",
-  databaseURL: "https://ednelback-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "ednelback",
-  storageBucket: "ednelback.firebasestorage.app",
-  messagingSenderId: "382560726698",
-  appId: "1:382560726698:web:86de9c648f53f87c9eead3",
-  measurementId: "G-117848WD92"
+  apiKey: import.meta.env.PUBLIC_FIREBASE_API_KEY,
+  authDomain: import.meta.env.PUBLIC_FIREBASE_AUTH_DOMAIN,
+  databaseURL: import.meta.env.PUBLIC_FIREBASE_DATABASE_URL,
+  projectId: import.meta.env.PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.PUBLIC_FIREBASE_APP_ID
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-
-// Define the path for user profiles
-export const USER_PROFILE_PATH = 'users';
+// Initialize Firebase only once
+const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 
 // Realtime Database
 export const db = getDatabase(app);
 
 // Auth
 export const auth = getAuth(app);
-
-// Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();
 
 // Login / Logout helpers
@@ -45,39 +48,42 @@ export const logout = () => signOut(auth);
 // Auth state listener
 export const subscribeToAuth = (callback) => onAuthStateChanged(auth, callback);
 
-// Export DB helpers
-export { ref, push, set, get, query, orderByChild, equalTo, update, limitToLast };
+// Database helpers
+export {
+  dbRef as ref,
+  dbPush as push,
+  dbSet as set,
+  dbGet as get,
+  dbQuery as query,
+  dbOrderByChild as orderByChild,
+  dbEqualTo as equalTo,
+  dbUpdate as update,
+  dbLimitToLast as limitToLast
+};
+
+// User profile path
+export const USER_PROFILE_PATH = 'users';
 
 /**
- * Checks if a user's profile exists in the database.
- * @param {string} uid - The Firebase User ID.
- * @returns {Promise<object | null>} The user profile data or null if not found.
+ * Get a user's profile
+ * @param {string} uid - Firebase User ID
  */
 export async function getUserProfile(uid) {
-    const profileRef = ref(db, `${USER_PROFILE_PATH}/${uid}`);
-    const snapshot = await get(profileRef);
-    if (snapshot.exists()) {
-        return snapshot.val();
-    }
-    return null;
+  const profileRef = dbRef(db, `${USER_PROFILE_PATH}/${uid}`);
+  const snapshot = await dbGet(profileRef);
+  return snapshot.exists() ? snapshot.val() : null;
 }
 
 /**
- * Creates or updates a user's profile in the Realtime Database.
- * @param {string} uid - The Firebase User ID.
- * @param {object} profileData - The profile data to save.
- * @returns {Promise<boolean>} True if successful.
+ * Save or update a user's profile
+ * @param {string} uid - Firebase User ID
+ * @param {object} profileData - Data to save
  */
 export async function saveUserProfile(uid, profileData) {
-    try {
-        const profileRef = ref(db, `${USER_PROFILE_PATH}/${uid}`);
-        await set(profileRef, {
-            ...profileData,
-            updatedAt: new Date().toISOString()
-        });
-        return true;
-    } catch (error) {
-        console.error("Error saving user profile:", error);
-        throw error;
-    }
+  const profileRef = dbRef(db, `${USER_PROFILE_PATH}/${uid}`);
+  await dbSet(profileRef, {
+    ...profileData,
+    updatedAt: new Date().toISOString()
+  });
+  return true;
 }
