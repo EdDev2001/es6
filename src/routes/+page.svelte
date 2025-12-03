@@ -1,292 +1,143 @@
 <script>
-import { ref, push, set, update, query, orderByChild, equalTo, get } from "$lib/firebase";
-import { db } from "$lib/firebase";
-import { onMount } from 'svelte';
-import { format } from 'date-fns';
-import {
-    IconClockPin, IconClockPause, IconClockPlay, IconClockStop,
-    IconAlertTriangle, IconActivity, IconClock
-} from "@tabler/icons-svelte";
+    import { auth, loginWithGoogle, subscribeToAuth, getUserProfile } from "$lib/firebase";
+    import { onMount } from 'svelte';
+    import ProfileForm from '$lib/components/ProfileForm.svelte';
+    
+    import { IconLock, IconLogin, IconLogout, IconUserCircle } from "@tabler/icons-svelte";
 
-let isProcessing = false;
-let cameraStream = null;
-let capturedImage = null;
-let status = 'none'; 
-let currentShiftId = null;
-let checkInTime = null;
-let currentTime = new Date();
-let timerInterval;
+    let user = null;
+    let isLoading = true;
+    let loginError = '';
+    
+    let userProfile = null;
+    let isCheckingProfile = true;
 
-const USER_PATH = 'attendance/anonymous';
+    async function checkAuthAndProfile(u) {
+      
+        user = u;
+        isCheckingProfile = true;
+        userProfile = null;
 
-// Update time every second
-onMount(() => {
-    loadActiveShift();
-    timerInterval = setInterval(() => currentTime = new Date(), 1000);
-    return () => clearInterval(timerInterval);
-});
-
-// Device info
-async function getDeviceInfo() {
-    const ua = navigator.userAgent;
-    const platform = navigator.platform;
-    let name = 'Unknown', version = 'Unknown';
-    if (ua.includes('Chrome')) name='Chrome', version=(ua.match(/Chrome\/([\d.]+)/)||[])[1]||'Unknown';
-    else if (ua.includes('Firefox')) name='Firefox', version=(ua.match(/Firefox\/([\d.]+)/)||[])[1]||'Unknown';
-    else if (ua.includes('Safari')) name='Safari', version=(ua.match(/Version\/([\d.]+)/)||[])[1]||'Unknown';
-    return { browser:`${name} ${version}`, device: platform, userAgent: ua, timestamp:new Date().toISOString() };
-}
-
-// Get coordinates
-async function getLocation() {
-    return new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(pos => {
-            resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy, timestamp: new Date(pos.timestamp).toISOString() });
-        }, reject, { enableHighAccuracy: true, timeout: 10000 });
-    });
-}
-
-// Reverse geocode to name
-async function getLocationName(lat, lng) {
-    try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
-        if (!res.ok) throw new Error('Failed to fetch location');
-        const data = await res.json();
-        const city = data.address.city || data.address.town || data.address.village || data.display_name;
-        const brgy = data.address.suburb || data.address.neighbourhood || data.address.quarter || '';
-        return brgy ? `${city}, ${brgy}` : city;
-    } catch {
-        return 'Unknown Location';
+        if (user) {
+            
+            try {
+                await user.getIdToken();
+                
+                const profile = await getUserProfile(user.uid);
+                
+                userProfile = profile;
+                
+            } catch (error) {
+                console.error(" Error checking profile:", error);
+                loginError = `Error loading profile: ${error.message}`;
+            }
+        } else {
+        }
+        
+        isCheckingProfile = false;
+        isLoading = false;
     }
-}
 
-// Capture camera image
-async function captureImage() {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user' } });
-        cameraStream = stream;
-        const video = document.createElement('video');
-        video.srcObject = stream;
-        await new Promise(r=>video.onloadedmetadata=()=>{video.play(); r();});
-        const canvas=document.createElement('canvas');
-        canvas.width=video.videoWidth; canvas.height=video.videoHeight;
-        canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
-        const image=canvas.toDataURL('image/jpeg',0.8);
-        cameraStream.getTracks().forEach(t=>t.stop());
-        cameraStream=null;
-        return image;
-    } catch(err){ console.error(err); return null; }
-}
+    onMount(() => {
 
-// Load active shift
-async function loadActiveShift() {
-    try {
-        const today = new Date().toDateString();
-        const attendanceRef = ref(db, USER_PATH);
-        const q = query(attendanceRef, orderByChild('date'), equalTo(today));
-        const snapshot = await get(q);
-        if (snapshot.exists()) {
-            let lastShift = null;
-            snapshot.forEach(childSnapshot => {
-                const shift = childSnapshot.val();
-                if (shift.currentStatus !== 'checkedOut') {
-                    lastShift = { key: childSnapshot.key, status: shift.currentStatus, checkIn: shift.checkIn };
-                }
-            });
-            if (lastShift) {
-                currentShiftId = lastShift.key;
-                status = lastShift.status;
-                if (lastShift.checkIn?.timestamp) checkInTime = new Date(lastShift.checkIn.timestamp);
-                if (lastShift.checkIn?.capturedImage) capturedImage = lastShift.checkIn.capturedImage;
+        const unsubscribe = subscribeToAuth(checkAuthAndProfile);
+        return unsubscribe;
+    });
+
+    async function handleGoogleLogin() {
+        loginError = '';
+        
+        try {
+            await loginWithGoogle();
+        } catch (error) {
+            console.error(" Login failed:", error);
+            
+            if (error.code === 'auth/popup-closed-by-user') {
+                loginError = 'The sign-in window was closed.';
+            } else if (error.code === 'auth/cancelled-popup-request') {
+                loginError = 'Authentication request cancelled (please click once).';
+            } else if (error.code === 'auth/configuration-not-found') {
+                loginError = 'Configuration error: Google Sign-in provider is not enabled.';
+            } else {
+                loginError = `Login failed: ${error.message}`;
             }
         }
-    } catch(err) { console.error("Error loading active shift:", err); }
-}
+    }
 
-// Log attendance
-async function logAttendance(action) {
-    if (isProcessing) return;
-    isProcessing = true;
-    try {
-        const device = await getDeviceInfo();
-        const coords = await getLocation();
-        const locationName = await getLocationName(coords.latitude, coords.longitude);
-        const image = await captureImage();
-        if (!image) throw new Error("Could not capture image");
-
-        const newActionData = {
-            timestamp: new Date().toISOString(),
-            location: { ...coords, name: locationName },
-            device,
-            capturedImage: image
-        };
-        capturedImage = image;
-
-        let entryRef, shouldReload = false;
-
-        if(action === 'checkIn') {
-            if (status !== 'none') throw new Error("Already checked in or on break.");
-            status = 'checkedIn';
-            entryRef = push(ref(db, USER_PATH));
-            currentShiftId = entryRef.key;
-            checkInTime = new Date();
-            await set(entryRef, { checkIn: newActionData, currentStatus: 'checkedIn', date: new Date().toDateString() });
-        } else {
-            if (!currentShiftId) throw new Error("Cannot perform action. Please Check In first.");
-            entryRef = ref(db, `${USER_PATH}/${currentShiftId}`);
-            let updateData = {};
-            if(action==='breakIn') { if (status!=='checkedIn') throw new Error("Must be checked in to start break."); status='onBreak'; updateData={ currentStatus:'onBreak', breakIn:newActionData }; }
-            else if(action==='breakOut') { if (status!=='onBreak') throw new Error("Must be on break to end break."); status='checkedIn'; updateData={ currentStatus:'checkedIn', breakOut:newActionData }; }
-            else if(action==='checkOut') { status='checkedOut'; updateData={ currentStatus:'checkedOut', checkOut:newActionData }; shouldReload=true; }
-            await update(entryRef, updateData);
+    async function handleLogout() {
+        try {
+            await auth.signOut();
+            user = null; 
+            userProfile = null;
+            loginError = '';
+            console.log(" Logged out");
+        } catch (error) {
+            console.error("Logout error:", error);
         }
-
-        alert(`${action} successful!`);
-        if (shouldReload) window.location.reload();
-    } catch(err){ console.error(err); alert(`Error: ${err.message}`); }
-    finally{ isProcessing = false; }
-}
-
-// Handlers
-const handleCheckIn = () => logAttendance("checkIn");
-const handleBreakIn = () => logAttendance("breakIn");
-const handleBreakOut = () => logAttendance("breakOut");
-const handleCheckOut = () => logAttendance("checkOut");
-
-// Shift duration
-$: timeOnShift = checkInTime ? currentTime.getTime() - checkInTime.getTime() : 0;
-function formatDuration(ms) {
-    if (!ms || ms<0) return '00:00:00';
-    const totalSeconds = Math.floor(ms/1000);
-    const hours=Math.floor(totalSeconds/3600);
-    const minutes=Math.floor((totalSeconds%3600)/60);
-    const seconds=totalSeconds%60;
-    const pad = n=>n.toString().padStart(2,'0');
-    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-}
+    }
+    
+    function handleProfileComplete(profileData) {
+        userProfile = profileData;
+    }
 </script>
 
-<div class="p-8 bg-gray-50 min-h-screen">
-    <h1 class="text-3xl font-extrabold text-gray-800 mb-6">Attendance Overview</h1>
-    <a href="app/dashboard" class="text-indigo-600 hover:underline mb-4 inline-block">← Back to Dashboard</a>
+<div class="flex items-center justify-center min-h-screen bg-gray-100 p-4">
+    {#if isLoading || isCheckingProfile}
+        <div class="w-full max-w-md text-center p-8 bg-white rounded-xl shadow-2xl">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+            <p class="text-gray-600 mb-2">Loading authentication state...</p>
+            <p class="text-xs text-gray-400">This should only take a moment</p>
+        </div>
+        
+    {:else if user && !userProfile}
+        <ProfileForm user={user} onProfileComplete={handleProfileComplete} />
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        <!-- Current Time -->
-        <div class="bg-white p-6 rounded-xl shadow hover:shadow-lg transition duration-200 flex flex-col justify-between">
-            <div class="flex items-center mb-4">
-                <IconClock class="w-8 h-8 text-indigo-500 mr-3"/>
-                <div>
-                    <p class="text-sm text-gray-500">Current Time</p>
-                    <p class="text-2xl font-bold text-gray-900">{format(currentTime,'h:mm:ss a')}</p>
+    {:else}
+        <div class="w-full max-w-md bg-white p-8 rounded-xl shadow-2xl">
+            <div class="text-center mb-8">
+                <IconLock class="w-12 h-12 mx-auto text-indigo-600 mb-3" />
+                <h1 class="text-3xl font-extrabold text-gray-800">Welcome Back</h1>
+                <p class="text-gray-500 mt-2">Sign in to access the Attendance Dashboard</p>
+            </div>
+
+            {#if user}
+                <div class="text-center p-6 border border-indigo-200 bg-indigo-50 rounded-lg mb-6">
+                    <IconUserCircle class="w-16 h-16 mx-auto text-indigo-600 mb-4" />
+                    <p class="text-xl font-semibold text-gray-800">Logged in as {user.displayName}</p>
+                    <p class="text-sm text-gray-600 mb-4">{user.email}</p>
+                    
+                    <!-- Simple link instead of automatic redirect -->
+                    <a 
+                        href="/app/dashboard" 
+                        class="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition duration-200"
+                    >
+                        Go to Dashboard →
+                    </a>
                 </div>
-            </div>
-            <p class="text-xs text-gray-400">{format(currentTime,'EEEE, MMM dd')}</p>
-        </div>
 
-        <!-- Status Card -->
-        <div class="p-6 rounded-xl shadow hover:shadow-lg transition duration-200"
-             class:bg-green-50={status==='checkedIn'}
-             class:bg-yellow-50={status==='onBreak'}
-             class:bg-gray-100={status==='none'||status==='checkedOut'}>
-            <div class="flex items-center mb-2">
-                <svelte:component
-                    this={status==='checkedIn'?IconActivity:(status==='onBreak'?IconAlertTriangle:IconClockStop)}
-                    class={`w-6 h-6 mr-2
-                        ${status==='checkedIn'?'text-green-600':''}
-                        ${status==='onBreak'?'text-yellow-600':''}
-                        ${status==='none'||status==='checkedOut'?'text-gray-500':''}`}
-                />
-                <p class="text-sm font-medium
-                    {status==='checkedIn'?'text-green-700':''}
-                    {status==='onBreak'?'text-yellow-700':''}
-                    {status==='none'||status==='checkedOut'?'text-gray-600':''}">Current Status</p>
-            </div>
-            <p class="text-3xl font-extrabold capitalize
-                {status==='checkedIn'?'text-green-800':''}
-                {status==='onBreak'?'text-yellow-800':''}
-                {status==='none'||status==='checkedOut'?'text-gray-800':''}">
-                {status==='none'?'Ready to Clock In':status}
-            </p>
-            {#if checkInTime}
-                <p class="text-sm text-gray-500 mt-1">Check In: {format(checkInTime,'h:mm a')}</p>
-            {/if}
-        </div>
-
-        <!-- Time on Shift -->
-        <div class="bg-white p-6 rounded-xl shadow hover:shadow-lg transition duration-200">
-            <p class="text-sm text-gray-500 mb-2">Time on Shift</p>
-            <p class="text-3xl font-extrabold text-indigo-700">{formatDuration(timeOnShift)}</p>
-        </div>
-    </div>
-
-    <!-- Action Center -->
-    <div class="bg-white p-6 rounded-xl shadow hover:shadow-lg transition duration-200">
-        <h2 class="text-xl font-bold mb-6 border-b pb-3 flex items-center gap-2">Action Center</h2>
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <!-- Image Display -->
-            <div>
-                <p class="font-semibold text-gray-700 mb-3">
-                    {status==='none'?'Ready for Check-in Image':'Last Recorded Image'}
-                </p>
-                {#if capturedImage}
-                    <div class="p-4 border rounded-lg bg-green-50 border-green-300">
-                        <img src={capturedImage} alt="Captured Attendance" class="w-full h-auto rounded-md"/>
-                    </div>
-                {:else}
-                    <div class="p-8 border rounded-lg text-center text-gray-500 bg-gray-50 h-64 flex items-center justify-center">
-                        <p>{status==='none'?'Click "Check In" to capture image.':'Image loaded from active shift.'}</p>
+                <button
+                    class="w-full flex items-center justify-center bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200"
+                    on:click={handleLogout}
+                >
+                    <IconLogout class="w-5 h-5 mr-2" />
+                    Sign Out
+                </button>
+            {:else}
+                {#if loginError}
+                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                        <strong class="font-bold">Error:</strong>
+                        <span class="block sm:inline ml-1">{loginError}</span>
                     </div>
                 {/if}
-            </div>
 
-            <!-- Buttons -->
-            <div class="flex flex-col justify-center">
-                <div class="grid grid-cols-2 gap-4">
-                    <!-- Check In -->
-                    <button class="flex flex-col items-center justify-center rounded p-4 text-white font-semibold shadow-md transition-all duration-200 h-24"
-                        class:bg-indigo-600={status==='none'}
-                        class:hover:bg-indigo-700={status==='none'}
-                        class:bg-gray-400={isProcessing || status!=='none'}
-                        on:click={handleCheckIn}
-                        disabled={isProcessing || status!=='none'}>
-                        <IconClockPin class="w-6 h-6 mb-1"/>
-                        <span class="text-sm">{isProcessing?'Processing...':'Check In'}</span>
-                    </button>
-
-                    <!-- Start Break -->
-                    <button class="flex flex-col items-center justify-center rounded p-4 text-white font-semibold shadow-md transition-all duration-200 h-24"
-                        class:bg-yellow-500={status==='checkedIn'}
-                        class:hover:bg-yellow-600={status==='checkedIn'}
-                        class:bg-gray-400={isProcessing || status!=='checkedIn'}
-                        on:click={handleBreakIn}
-                        disabled={isProcessing || status!=='checkedIn'}>
-                        <IconClockPause class="w-6 h-6 mb-1"/>
-                        <span class="text-sm">Start Break</span>
-                    </button>
-
-                    <!-- End Break -->
-                    <button class="flex flex-col items-center justify-center rounded p-4 text-white font-semibold shadow-md transition-all duration-200 h-24"
-                        class:bg-green-600={status==='onBreak'}
-                        class:hover:bg-green-700={status==='onBreak'}
-                        class:bg-gray-400={isProcessing || status!=='onBreak'}
-                        on:click={handleBreakOut}
-                        disabled={isProcessing || status!=='onBreak'}>
-                        <IconClockPlay class="w-6 h-6 mb-1"/>
-                        <span class="text-sm">End Break</span>
-                    </button>
-
-                    <!-- Check Out -->
-                    <button class="flex flex-col items-center justify-center rounded p-4 text-white font-semibold shadow-md transition-all duration-200 h-24"
-                        class:bg-red-600={status==='checkedIn' || status==='onBreak'} 
-                        class:hover:bg-red-700={status==='checkedIn' || status==='onBreak'}
-                        class:bg-gray-400={isProcessing || (status!=='checkedIn' && status!=='onBreak')}
-                        on:click={handleCheckOut}
-                        disabled={isProcessing || (status!=='checkedIn' && status!=='onBreak')}>
-                        <IconClockStop class="w-6 h-6 mb-1"/>
-                        <span class="text-sm">Check Out</span>
-                    </button>
-                </div>
-            </div>
+                <button
+                    class="w-full flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200 shadow-md"
+                    on:click={handleGoogleLogin}
+                >
+                    <IconLogin class="w-5 h-5 mr-3" />
+                    Sign in with Google
+                </button>
+            {/if}
         </div>
-    </div>
+    {/if}
 </div>
