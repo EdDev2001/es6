@@ -1,4 +1,5 @@
 <script>
+    import { browser } from "$app/environment";
     import { page } from "$app/stores";
     import { goto } from "$app/navigation";
     import { onMount } from "svelte";
@@ -10,6 +11,14 @@
     let isCheckingAuth = true;
 
     onMount(() => {
+        // Extra safety check for browser environment
+        if (!browser || !auth) {
+            console.warn("⚠️ Firebase not available");
+            isCheckingAuth = false;
+            goto('/');
+            return;
+        }
+
         console.log("🎬 App layout mounted");
         
         const unsubscribe = auth.onAuthStateChanged(async (u) => {
@@ -101,8 +110,7 @@
             <!-- Sidebar Links -->
             <nav class="flex-grow p-4 space-y-2">
                 {#each navLinks as link}
-                    
-                     <a   href={link.href}
+                    <a href={link.href}
                         class="flex items-center p-3 rounded-lg transition duration-150"
                         class:bg-indigo-50={isActive(link.href)}
                         class:text-indigo-700={isActive(link.href)}

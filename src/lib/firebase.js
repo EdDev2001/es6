@@ -1,4 +1,5 @@
 // src/lib/firebase.js
+import { browser } from '$app/environment';
 import { initializeApp, getApps } from 'firebase/app';
 import {
   getDatabase,
@@ -31,35 +32,49 @@ const firebaseConfig = {
   appId: import.meta.env.PUBLIC_FIREBASE_APP_ID
 };
 
-// Initialize Firebase only once
-const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+// Initialize Firebase only in browser
+let app;
+let db;
+let auth;
+let googleProvider;
 
-// Realtime Database
-export const db = getDatabase(app);
+if (browser) {
+  app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+  db = getDatabase(app);
+  auth = getAuth(app);
+  googleProvider = new GoogleAuthProvider();
+}
 
-// Auth
-export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
+// Export with safe defaults for SSR
+export { db, auth, googleProvider };
 
 // Login / Logout helpers
-export const loginWithGoogle = () => signInWithPopup(auth, googleProvider);
-export const logout = () => signOut(auth);
+export const loginWithGoogle = () => {
+  if (!browser || !auth) throw new Error('Auth not initialized');
+  return signInWithPopup(auth, googleProvider);
+};
+
+export const logout = () => {
+  if (!browser || !auth) throw new Error('Auth not initialized');
+  return signOut(auth);
+};
 
 // Auth state listener
-export const subscribeToAuth = (callback) => onAuthStateChanged(auth, callback);
-
-// Database helpers
-export {
-  dbRef as ref,
-  dbPush as push,
-  dbSet as set,
-  dbGet as get,
-  dbQuery as query,
-  dbOrderByChild as orderByChild,
-  dbEqualTo as equalTo,
-  dbUpdate as update,
-  dbLimitToLast as limitToLast
+export const subscribeToAuth = (callback) => {
+  if (!browser || !auth) return () => {};
+  return onAuthStateChanged(auth, callback);
 };
+
+// Database helpers - only export if in browser
+export const ref = browser ? dbRef : () => { throw new Error('Database not available on server'); };
+export const push = browser ? dbPush : () => { throw new Error('Database not available on server'); };
+export const set = browser ? dbSet : () => { throw new Error('Database not available on server'); };
+export const get = browser ? dbGet : () => { throw new Error('Database not available on server'); };
+export const query = browser ? dbQuery : () => { throw new Error('Database not available on server'); };
+export const orderByChild = browser ? dbOrderByChild : () => { throw new Error('Database not available on server'); };
+export const equalTo = browser ? dbEqualTo : () => { throw new Error('Database not available on server'); };
+export const update = browser ? dbUpdate : () => { throw new Error('Database not available on server'); };
+export const limitToLast = browser ? dbLimitToLast : () => { throw new Error('Database not available on server'); };
 
 // User profile path
 export const USER_PROFILE_PATH = 'users';
@@ -69,6 +84,7 @@ export const USER_PROFILE_PATH = 'users';
  * @param {string} uid - Firebase User ID
  */
 export async function getUserProfile(uid) {
+  if (!browser || !db) throw new Error('Database not available');
   const profileRef = dbRef(db, `${USER_PROFILE_PATH}/${uid}`);
   const snapshot = await dbGet(profileRef);
   return snapshot.exists() ? snapshot.val() : null;
@@ -80,6 +96,7 @@ export async function getUserProfile(uid) {
  * @param {object} profileData - Data to save
  */
 export async function saveUserProfile(uid, profileData) {
+  if (!browser || !db) throw new Error('Database not available');
   const profileRef = dbRef(db, `${USER_PROFILE_PATH}/${uid}`);
   await dbSet(profileRef, {
     ...profileData,

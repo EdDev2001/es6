@@ -1,12 +1,12 @@
-import adapter from '@sveltejs/adapter-static';
+import adapter from '@sveltejs/adapter-auto';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
-export default {
+/** @type {import('@sveltejs/kit').Config} */
+const config = {
+  preprocess: vitePreprocess(),
   kit: {
-    adapter: adapter({
-      fallback: 'index.html'
-    }),
-    prerender: {
-      crawl: false, // don't try to prerender pages automatically
-    }
+    adapter: adapter()
   }
 };
+
+export default config;
