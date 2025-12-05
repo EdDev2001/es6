@@ -4,8 +4,8 @@
     import { goto } from "$app/navigation";
     import { onMount } from "svelte";
     import { auth, getUserProfile } from "$lib/firebase";
-
-    import { IconMenu2, IconX, IconClockPin, IconListDetails, IconHome } from "@tabler/icons-svelte";
+    import { themeStore } from "$lib/stores/theme.js";
+    import { IconMenu2, IconX, IconClockPin, IconListDetails, IconHome, IconUser, IconLogout, IconChevronRight, IconChartBar, IconTrophy } from "@tabler/icons-svelte";
 
     let user = null;
     let userProfile = null;
@@ -18,6 +18,9 @@
             goto('/');
             return;
         }
+
+        // Initialize theme
+        themeStore.init();
     
         const unsubscribe = auth.onAuthStateChanged(async (u) => {
             if (!u) {
@@ -29,13 +32,12 @@
 
             try {
                 userProfile = await getUserProfile(u.uid);
-
                 if (!userProfile) {
                     goto('/');
                     return;
                 }
             } catch (error) {
-                console.error("❌ Error loading profile:", error);
+                console.error("Error loading profile:", error);
             }
 
             isCheckingAuth = false;
@@ -55,107 +57,481 @@
 
     const navLinks = [
         { href: '/app/dashboard', icon: IconHome, label: 'Dashboard' },
-        { href: '/app/attendance', icon: IconClockPin, label: 'Attendance Check-in' },
-        { href: '/app/history', icon: IconListDetails, label: 'Attendance History' },
-        { href: '/app/profile', icon: IconListDetails, label: 'User Profile' }
+        { href: '/app/attendance', icon: IconClockPin, label: 'Attendance' },
+        { href: '/app/history', icon: IconListDetails, label: 'History' },
+        { href: '/app/analytics', icon: IconChartBar, label: 'Analytics' },
+        { href: '/app/gamification', icon: IconTrophy, label: 'Achievements' },
+        { href: '/app/profile', icon: IconUser, label: 'Profile' }
     ];
 
     function isActive(href) {
         return $page.url.pathname === href;
     }
+
+    function closeSidebar() {
+        sidebarOpen = false;
+    }
 </script>
 
 {#if isCheckingAuth}
-<div class="flex items-center justify-center min-h-screen bg-gray-100">
-    <div class="text-center">
-        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-        <p class="text-gray-600">Loading...</p>
+<!-- Loading State -->
+<div class="loading-screen">
+    <div class="loading-content apple-animate-in">
+        <div class="apple-spinner"></div>
+        <p class="loading-text">Loading...</p>
+        <p class="loading-subtext">Preparing your workspace</p>
     </div>
 </div>
 
 {:else if user && userProfile}
 
-<div class="lg:hidden flex items-center justify-between p-4 bg-white shadow">
-    <h1 class="text-lg font-semibold text-indigo-700">Attendance System</h1>
-    <button on:click={() => (sidebarOpen = true)}>
-        <IconMenu2 class="w-7 h-7 text-gray-800" />
-    </button>
-</div>
+<!-- Mobile Header -->
+<header class="mobile-header">
+    <div class="mobile-header-content">
+        <div class="mobile-brand">
+            <span class="brand-text">Attendance System</span>
+        </div>
+        <button class="menu-btn" on:click={() => (sidebarOpen = true)} aria-label="Open menu">
+            <IconMenu2 size={24} stroke={1.5} />
+        </button>
+    </div>
+</header>
 
-<div class="flex h-screen bg-gray-100">
-
+<div class="app-layout">
+    <!-- Mobile Overlay -->
     {#if sidebarOpen}
-        <div aria-hidden="true" class="fixed inset-0 bg-blue-100/30 backdrop-blur-sm z-20 lg:hidden"
-            on:click={() => (sidebarOpen = false)}></div>
+        <div class="sidebar-overlay" on:click={closeSidebar} on:keydown={closeSidebar} role="button" tabindex="0" aria-label="Close sidebar"></div>
     {/if}
 
-
-    <aside
-    class="
-        fixed lg:static z-30
-        h-full w-64 bg-white shadow-xl 
-        transform transition-transform duration-300
-        flex flex-col
-        lg:translate-x-0
-        rounded-xl
-    "
-        class:translate-x-0={sidebarOpen}
-        class:-translate-x-full={!sidebarOpen}
-    >
-        <div class="p-6 text-xl font-bold text-indigo-700 border-b flex justify-between items-center lg:block">
-            <span>Attendance System</span>
-            <button class="lg:hidden" on:click={() => (sidebarOpen = false)}>
-                <IconX class="w-6 h-6 text-gray-700" />
+    <!-- Sidebar -->
+    <aside class="sidebar" class:sidebar-open={sidebarOpen}>
+        <!-- Sidebar Header -->
+        <div class="sidebar-header">
+            <span class="sidebar-brand">Attendance System</span>
+            <button class="close-btn" on:click={closeSidebar} aria-label="Close menu">
+                <IconX size={20} stroke={1.5} />
             </button>
         </div>
 
-        <div class="p-4 border-b">
-            <div class="flex items-center gap-3">
-                {#if user.photoURL}
-                    <img src={user.photoURL} class="w-10 h-10 rounded-full" alt="User" />
+        <!-- User Profile Section -->
+        <div class="sidebar-profile">
+            <div class="profile-avatar-wrapper">
+                {#if userProfile?.profilePhoto || user.photoURL}
+                    <img src={userProfile?.profilePhoto || user.photoURL} class="profile-avatar" alt="User" />
                 {:else}
-                    <div class="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold">
+                    <div class="profile-avatar-placeholder">
                         {userProfile.name?.charAt(0) || 'U'}
                     </div>
                 {/if}
-
-                <div class="flex-1 min-w-0">
-                    <p class="font-semibold truncate">{userProfile.name}</p>
-                    <p class="text-xs text-gray-500 truncate">{userProfile.departmentOrCourse}</p>
-                </div>
+                <div class="avatar-status-dot"></div>
+            </div>
+            <div class="profile-info">
+                <p class="profile-name">{userProfile.name}</p>
+                <p class="profile-role">{userProfile.departmentOrCourse}</p>
             </div>
         </div>
 
-        <nav class="flex-grow p-4 space-y-2">
+        <!-- Navigation -->
+        <nav class="sidebar-nav">
             {#each navLinks as link}
-                <a
-                    href={link.href}
-                    class="flex items-center p-3 rounded-lg transition duration-150"
-                    class:bg-indigo-50={isActive(link.href)}
-                    class:text-indigo-700={isActive(link.href)}
-                    class:font-semibold={isActive(link.href)}
-                    class:text-gray-600={!isActive(link.href)}
-                    class:hover:bg-indigo-100={!isActive(link.href)}
-                    on:click={() => (sidebarOpen = false)}
-                >
-                    <svelte:component this={link.icon} class="w-5 h-5 mr-3" />
-                    <span>{link.label}</span>
+                <a href={link.href}
+                   class="nav-link"
+                   class:nav-link-active={isActive(link.href)}
+                   on:click={closeSidebar}>
+                    <svelte:component this={link.icon} size={20} stroke={1.5} />
+                    <span class="nav-label">{link.label}</span>
+                    {#if isActive(link.href)}
+                        <IconChevronRight size={16} stroke={2} class="nav-arrow" />
+                    {/if}
                 </a>
             {/each}
         </nav>
 
-        <div class="p-4 border-t">
-            <button 
-                class="w-full bg-gray-500 hover:bg-gray-600 text-white p-2 rounded transition duration-200"
-                on:click={handleLogout}
-            >
-                Logout
+        <!-- Logout Button -->
+        <div class="sidebar-footer">
+            <button class="logout-btn" on:click={handleLogout}>
+                <IconLogout size={20} stroke={1.5} />
+                <span>Sign Out</span>
             </button>
         </div>
     </aside>
 
-    <main class="flex-grow overflow-y-auto pt-2 lg:pt-0">
+    <!-- Main Content -->
+    <main class="main-content">
         <slot />
     </main>
 </div>
+
+<!-- Mobile Bottom Navigation -->
+<nav class="mobile-nav">
+    {#each navLinks as link}
+        <a href={link.href} 
+           class="mobile-nav-link"
+           class:mobile-nav-active={isActive(link.href)}>
+            <svelte:component this={link.icon} size={22} stroke={isActive(link.href) ? 2 : 1.5} />
+            <span class="mobile-nav-label">{link.label}</span>
+        </a>
+    {/each}
+</nav>
 {/if}
+
+<style>
+    /* Loading Screen */
+    .loading-screen {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--theme-bg, var(--apple-light-bg));
+    }
+
+    .loading-content {
+        text-align: center;
+    }
+
+    .loading-text {
+        font-size: 17px;
+        font-weight: 600;
+        color: var(--theme-text, var(--apple-black));
+        margin-top: 20px;
+    }
+
+    .loading-subtext {
+        font-size: 14px;
+        color: var(--theme-text-secondary, var(--apple-gray-1));
+        margin-top: 4px;
+    }
+
+    /* Mobile Header */
+    .mobile-header {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 40;
+        background: var(--theme-card-bg, var(--apple-white));
+        border-bottom: 1px solid var(--theme-border-light, var(--apple-gray-5));
+    }
+
+    .mobile-header-content {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+        height: 60px;
+    }
+
+    .brand-text {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--theme-text, var(--apple-black));
+    }
+
+    .menu-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border-radius: var(--apple-radius-md);
+        background: transparent;
+        border: none;
+        color: var(--theme-text-secondary, var(--apple-gray-1));
+        cursor: pointer;
+        transition: var(--apple-transition);
+    }
+
+    .menu-btn:hover {
+        background: var(--theme-border-light, var(--apple-gray-6));
+        color: var(--theme-text, var(--apple-black));
+    }
+
+    /* App Layout */
+    .app-layout {
+        display: flex;
+        min-height: 100vh;
+        background: var(--theme-bg, var(--apple-light-bg));
+    }
+
+    /* Sidebar Overlay */
+    .sidebar-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        z-index: 45;
+    }
+
+    /* Sidebar */
+    .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 260px;
+        background: var(--theme-card-bg, var(--apple-white));
+        border-right: 1px solid var(--theme-border-light, var(--apple-gray-5));
+        display: flex;
+        flex-direction: column;
+        z-index: 50;
+        transition: transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+    }
+
+    .sidebar-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 20px 20px;
+        border-bottom: 1px solid var(--theme-border-light, var(--apple-gray-5));
+    }
+
+    .sidebar-brand {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--theme-text, var(--apple-black));
+        letter-spacing: -0.3px;
+    }
+
+    .close-btn {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: var(--apple-radius-sm);
+        background: var(--theme-border-light, var(--apple-gray-6));
+        border: none;
+        color: var(--theme-text-secondary, var(--apple-gray-1));
+        cursor: pointer;
+        transition: var(--apple-transition);
+    }
+
+    .close-btn:hover {
+        background: var(--theme-border, var(--apple-gray-5));
+        color: var(--theme-text, var(--apple-black));
+    }
+
+    /* Sidebar Profile */
+    .sidebar-profile {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--theme-border-light, var(--apple-gray-5));
+    }
+
+    .profile-avatar-wrapper {
+        position: relative;
+        flex-shrink: 0;
+    }
+
+    .profile-avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    .profile-avatar-placeholder {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--apple-accent), #5856D6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 600;
+        font-size: 16px;
+    }
+
+    .avatar-status-dot {
+        position: absolute;
+        bottom: 2px;
+        right: 2px;
+        width: 12px;
+        height: 12px;
+        background: var(--apple-green);
+        border: 2px solid var(--theme-card-bg, var(--apple-white));
+        border-radius: 50%;
+    }
+
+    .profile-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .profile-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--theme-text, var(--apple-black));
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .profile-role {
+        font-size: 12px;
+        color: var(--theme-text-secondary, var(--apple-gray-1));
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Navigation */
+    .sidebar-nav {
+        flex: 1;
+        padding: 12px;
+        overflow-y: auto;
+    }
+
+    .nav-link {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 14px;
+        border-radius: var(--apple-radius-md);
+        color: var(--theme-text-secondary, var(--apple-gray-1));
+        font-size: 14px;
+        font-weight: 500;
+        text-decoration: none;
+        transition: var(--apple-transition);
+        margin-bottom: 4px;
+    }
+
+    .nav-link:hover {
+        background: var(--theme-border-light, var(--apple-gray-6));
+        color: var(--theme-text, var(--apple-black));
+    }
+
+    .nav-link-active {
+        background: rgba(0, 122, 255, 0.1);
+        color: var(--apple-accent);
+    }
+
+    .nav-link-active:hover {
+        background: rgba(0, 122, 255, 0.15);
+        color: var(--apple-accent);
+    }
+
+    .nav-arrow {
+        margin-left: auto;
+        opacity: 0.6;
+    }
+
+    /* Sidebar Footer */
+    .sidebar-footer {
+        padding: 16px;
+        border-top: 1px solid var(--theme-border-light, var(--apple-gray-5));
+    }
+
+    .logout-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        padding: 12px 16px;
+        background: transparent;
+        border: 1px solid var(--theme-border, var(--apple-gray-4));
+        border-radius: var(--apple-radius-md);
+        color: var(--theme-text-secondary, var(--apple-gray-1));
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: var(--apple-transition);
+    }
+
+    .logout-btn:hover {
+        background: var(--theme-border-light, var(--apple-gray-6));
+        color: var(--theme-text, var(--apple-black));
+        border-color: var(--theme-border, var(--apple-gray-3));
+    }
+
+    /* Main Content */
+    .main-content {
+        flex: 1;
+        margin-left: 260px;
+        min-height: 100vh;
+        overflow-y: auto;
+    }
+
+    /* Mobile Bottom Navigation */
+    .mobile-nav {
+        display: none;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: var(--theme-card-bg, var(--apple-white));
+        border-top: 1px solid var(--theme-border-light, var(--apple-gray-5));
+        padding: 8px 0;
+        padding-bottom: calc(8px + env(safe-area-inset-bottom));
+        z-index: 40;
+    }
+
+    .mobile-nav-link {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        flex: 1;
+        padding: 6px 0;
+        color: var(--theme-text-secondary, var(--apple-gray-1));
+        text-decoration: none;
+        transition: var(--apple-transition);
+    }
+
+    .mobile-nav-active {
+        color: var(--apple-accent);
+    }
+
+    .mobile-nav-label {
+        font-size: 10px;
+        font-weight: 500;
+    }
+
+    /* Responsive - Tablet & Mobile */
+    @media (max-width: 1024px) {
+        .mobile-header {
+            display: block;
+        }
+
+        .sidebar {
+            transform: translateX(-100%);
+        }
+
+        .sidebar-open {
+            transform: translateX(0);
+            box-shadow: var(--apple-shadow-lg);
+        }
+
+        .sidebar-overlay {
+            display: block;
+        }
+
+        .close-btn {
+            display: flex;
+        }
+
+        .main-content {
+            margin-left: 0;
+            padding-top: 60px;
+            padding-bottom: 80px;
+        }
+
+        .mobile-nav {
+            display: flex;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .sidebar {
+            width: 100%;
+            max-width: 300px;
+        }
+    }
+</style>

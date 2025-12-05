@@ -1,41 +1,47 @@
 // src/hooks.server.js
-import { redirect} from '@sveltejs/kit';
-import { adminAuth } from '$lib/server/firebase-admin'; 
-
+import { redirect } from '@sveltejs/kit';
 
 const SESSION_COOKIE_NAME = '__session';
 
+// Only import Firebase Admin if credentials are available
+let adminAuth = null;
+const hasFirebaseCredentials = !!import.meta.env.FIREBASE_SERVICE_ACCOUNT;
+
+if (hasFirebaseCredentials) {
+    try {
+        const firebaseAdmin = await import('$lib/server/firebase-admin');
+        adminAuth = firebaseAdmin.adminAuth;
+    } catch (e) {
+        console.warn('Firebase Admin not available - running in dev mode without server auth');
+    }
+}
+
 /** @type {Handle} */
 export const handle = async ({ event, resolve }) => {
-    // 1. Get the session cookie from the incoming request
     const sessionCookie = event.cookies.get(SESSION_COOKIE_NAME);
     let userId = null;
 
-    if (sessionCookie) {
+    // Only verify session if Firebase Admin is available
+    if (sessionCookie && adminAuth) {
         try {
-            // 2. Verify the session cookie using the Firebase Admin SDK
             const decodedClaims = await adminAuth.verifySessionCookie(sessionCookie, true);
             userId = decodedClaims.uid;
         } catch (error) {
-            // Token is expired, revoked, or invalid. Clear the cookie and proceed unauthenticated.
             console.warn("Invalid or expired session cookie:", error.code);
             event.cookies.delete(SESSION_COOKIE_NAME, { path: '/' });
         }
     }
 
-    // 3. Populate event.locals.userId
     event.locals.userId = userId;
 
-    // 4. Authentication Guard for Protected Routes
-    const protectedRoutes = ['/app/dashboard']; // Any route starting with /app/dashboard
+    // Authentication Guard for Protected Routes (only if Firebase Admin is available)
+    const protectedRoutes = ['/app/dashboard'];
 
-    if (protectedRoutes.some(route => event.url.pathname.startsWith(route))) {
-        // If they are on a protected route but not authenticated, redirect them to login
+    if (adminAuth && protectedRoutes.some(route => event.url.pathname.startsWith(route))) {
         if (!userId) {
-            throw redirect(302, '/'); // Redirect to your login page
+            throw redirect(302, '/');
         }
     }
-
 
     return resolve(event);
 };

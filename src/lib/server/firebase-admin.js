@@ -2,17 +2,29 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getDatabase } from 'firebase-admin/database';
-import { FIREBASE_SERVICE_ACCOUNT } from '$env/static/private';
-import { PUBLIC_FIREBASE_DATABASE_URL } from '$env/static/public';
 
-let adminAuth;
-let adminDb;
+// Use dynamic import to avoid build errors when env vars are missing
+let FIREBASE_SERVICE_ACCOUNT = '';
+let PUBLIC_FIREBASE_DATABASE_URL = '';
 
-if (!getApps().length) {
-    if (!FIREBASE_SERVICE_ACCOUNT) {
-        throw new Error("FIREBASE_SERVICE_ACCOUNT environment variable is not set");
-    }
+try {
+    const privateEnv = await import('$env/static/private');
+    FIREBASE_SERVICE_ACCOUNT = privateEnv.FIREBASE_SERVICE_ACCOUNT || '';
+} catch (e) {
+    console.warn('FIREBASE_SERVICE_ACCOUNT not available');
+}
 
+try {
+    const publicEnv = await import('$env/static/public');
+    PUBLIC_FIREBASE_DATABASE_URL = publicEnv.PUBLIC_FIREBASE_DATABASE_URL || '';
+} catch (e) {
+    console.warn('PUBLIC_FIREBASE_DATABASE_URL not available');
+}
+
+let adminAuth = null;
+let adminDb = null;
+
+if (!getApps().length && FIREBASE_SERVICE_ACCOUNT) {
     try {
         let jsonString = FIREBASE_SERVICE_ACCOUNT.trim();
         if (jsonString.startsWith('"') && jsonString.endsWith('"')) {
@@ -35,11 +47,13 @@ if (!getApps().length) {
         adminDb = getDatabase();
     } catch (err) {
         console.error("Failed to initialize Firebase Admin:", err.message);
-        throw err;
     }
-} else {
+} else if (getApps().length) {
     adminAuth = getAuth();
     adminDb = getDatabase();
+} else {
+    console.warn("⚠️ Running without Firebase Admin - FIREBASE_SERVICE_ACCOUNT not set");
+    console.warn("⚠️ Server-side authentication will be disabled");
 }
 
 

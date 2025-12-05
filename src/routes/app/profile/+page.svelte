@@ -1,151 +1,297 @@
 <script>
-    import { db, USER_PROFILE_PATH } from "$lib/firebase";
-    import { ref, get, update } from "firebase/database";
-    import { IconUser, IconCheck, IconAlertTriangle } from "@tabler/icons-svelte";
-    import { onDestroy } from "svelte";
+    import { auth, db, USER_PROFILE_PATH, getUserProfile } from "$lib/firebase";
+    import { ref, update } from "firebase/database";
+    import { IconUser, IconCheck, IconAlertTriangle, IconPalette, IconBell, IconShieldLock } from "@tabler/icons-svelte";
+    import { onMount } from "svelte";
+    import ProfileCustomization from "$lib/components/ProfileCustomization.svelte";
+    import NotificationsCenter from "$lib/components/NotificationsCenter.svelte";
+    import PrivacySettings from "$lib/components/PrivacySettings.svelte";
+    import { themeStore } from "$lib/stores/theme.js";
 
-    export let user;
-
-    let loading = false;
+    let user = null;
+    let userProfile = null;
+    let loading = true;
     let saving = false;
     let saveSuccess = false;
     let saveError = "";
-    let formData = {
-        name: "",
-        year: "",
-        departmentOrCourse: "",
-        section: ""
-    };
+    let activeTab = "info";
+    let formData = { name: "", year: "", departmentOrCourse: "", section: "" };
 
-    $: if (user) {
-        loadProfile();
-    } else {
-        formData = { name: "", year: "", departmentOrCourse: "", section: "" };
-    }
-
-    async function loadProfile() {
-        loading = true;
-        saveError = "";
-        saveSuccess = false;
-        try {
-            const path = `${USER_PROFILE_PATH}/${user.uid}`;
-            const userRef = ref(db, path);;
-
-            const snapshot = await get(userRef);
-
-            if (snapshot.exists()) {
-                const data = snapshot.val();
-                formData = {
-                    name: data.name || user.displayName || "",
-                    year: data.year || "",
-                    departmentOrCourse: data.departmentOrCourse || "",
-                    section: data.section || ""
-                };
-            } else {
-                formData = {
-                    name: user.displayName || "",
-                    year: "",
-                    departmentOrCourse: "",
-                    section: ""
-                };
+    onMount(async () => {
+        themeStore.init();
+        user = auth.currentUser;
+        if (user) {
+            try {
+                const profile = await getUserProfile(user.uid);
+                userProfile = profile;
+                if (profile) {
+                    formData = {
+                        name: profile.name || user.displayName || "",
+                        year: profile.year || "",
+                        departmentOrCourse: profile.departmentOrCourse || "",
+                        section: profile.section || ""
+                    };
+                }
+            } catch (e) {
+                console.error("Error loading profile:", e);
+                saveError = "Failed to load profile.";
             }
-        } catch (e) {
-            console.error("🔴 Error loading profile (Check Firebase connection/rules):", e);
-            saveError = "Failed to load profile.";
         }
-
         loading = false;
-    }
+    });
 
     async function updateProfile() {
         if (!user || saving) return;
-
         saveError = "";
         saveSuccess = false;
         saving = true;
-
         try {
             if (!formData.name || !formData.year || !formData.departmentOrCourse || !formData.section) {
                 throw new Error("All fields are required.");
             }
-
             const userRef = ref(db, `${USER_PROFILE_PATH}/${user.uid}`);
             await update(userRef, formData);
-
             saveSuccess = true;
             setTimeout(() => saveSuccess = false, 3000);
         } catch (e) {
             console.error(e);
             saveError = e.message;
         }
-
         saving = false;
     }
 </script>
 
-<div class="w-full max-w-xl mx-auto bg-white p-8 rounded-xl shadow-xl border border-indigo-200">
-    <div class="flex items-center gap-3 mb-6">
-        <IconUser class="w-10 h-10 text-indigo-600" />
-        <h1 class="text-3xl font-bold">Edit Profile</h1>
-    </div>
+<svelte:head><title>Profile | Attendance System</title></svelte:head>
 
-    {#if loading}
-        <p class="text-center text-gray-600">Loading user details...</p>
-    {:else}
-        {#if saveSuccess}
-            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-                Profile updated successfully!
-            </div>
-        {/if}
+<div class="profile-page">
+    <div class="profile-content apple-animate-in">
+        <header class="page-header">
+            <h1 class="page-title">Profile</h1>
+            <p class="page-subtitle">Manage your account and preferences</p>
+        </header>
 
-        {#if saveError}
-            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 flex items-center gap-2">
-                <IconAlertTriangle class="w-5 h-5" /> {saveError}
-            </div>
-        {/if}
-
-        <form on:submit|preventDefault={updateProfile} class="space-y-4">
-            <div>
-                <label for="name" class="font-medium text-gray-700">Full Name</label>
-                <input id="name" class="w-full mt-1 p-2 border rounded"
-                    type="text"
-                    bind:value={formData.name}
-                    required />
-            </div>
-
-            <div>
-                <label for="year" class="font-medium text-gray-700">Year / Level</label>
-                <input id="year" class="w-full mt-1 p-2 border rounded"
-                    type="text"
-                    bind:value={formData.year}
-                    required />
-            </div>
-
-            <div>
-                <label for="course" class="font-medium text-gray-700">Department or Course</label>
-                <input id="course" class="w-full mt-1 p-2 border rounded"
-                    type="text"
-                    bind:value={formData.departmentOrCourse}
-                    required />
-            </div>
-
-            <div>
-                <label for="section" class="font-medium text-gray-700">Section</label>
-                <input id="section" class="w-full mt-1 p-2 border rounded"
-                    type="text"
-                    bind:value={formData.section}
-                    required />
-            </div>
-
-            <button type="submit" disabled={saving}
-                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-lg font-medium transition disabled:opacity-50 flex items-center justify-center gap-2">
-                {#if saving}
-                    Saving...
-                {:else}
-                    <IconCheck class="w-5 h-5" /> Update Profile
-                {/if}
+        <!-- Tab Navigation -->
+        <div class="tab-nav">
+            <button 
+                class="tab-btn" 
+                class:tab-active={activeTab === 'info'}
+                on:click={() => activeTab = 'info'}
+            >
+                <IconUser size={18} stroke={1.5} />
+                <span>Profile</span>
             </button>
-        </form>
+            <button 
+                class="tab-btn" 
+                class:tab-active={activeTab === 'customize'}
+                on:click={() => activeTab = 'customize'}
+            >
+                <IconPalette size={18} stroke={1.5} />
+                <span>Customize</span>
+            </button>
+            <button 
+                class="tab-btn" 
+                class:tab-active={activeTab === 'notifications'}
+                on:click={() => activeTab = 'notifications'}
+            >
+                <IconBell size={18} stroke={1.5} />
+                <span>Alerts</span>
+            </button>
+            <button 
+                class="tab-btn" 
+                class:tab-active={activeTab === 'privacy'}
+                on:click={() => activeTab = 'privacy'}
+            >
+                <IconShieldLock size={18} stroke={1.5} />
+                <span>Privacy</span>
+            </button>
+        </div>
 
-    {/if}
+        {#if loading}
+            <div class="profile-card">
+                <div class="loading-state">
+                    <div class="apple-spinner"></div>
+                    <p class="loading-text">Loading profile...</p>
+                </div>
+            </div>
+        {:else}
+            <!-- Profile Info Tab -->
+            {#if activeTab === 'info'}
+                <div class="profile-card apple-animate-in">
+                    <div class="card-header">
+                        <div class="header-icon"><IconUser size={24} stroke={1.5} /></div>
+                        <div class="header-text">
+                            <h2 class="card-title">Edit Profile</h2>
+                            <p class="card-subtitle">Update your personal information</p>
+                        </div>
+                    </div>
+
+                    {#if saveSuccess}
+                        <div class="alert alert-success apple-animate-in">
+                            <IconCheck size={20} stroke={2} />
+                            <span>Profile updated successfully!</span>
+                        </div>
+                    {/if}
+
+                    {#if saveError}
+                        <div class="alert alert-error apple-animate-in">
+                            <IconAlertTriangle size={20} stroke={2} />
+                            <span>{saveError}</span>
+                        </div>
+                    {/if}
+
+                    <form on:submit|preventDefault={updateProfile} class="profile-form">
+                        <div class="form-group">
+                            <label for="name" class="form-label">Full Name</label>
+                            <input id="name" type="text" class="form-input" bind:value={formData.name} required placeholder="Enter your full name" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="year" class="form-label">Year / Level</label>
+                            <input id="year" type="text" class="form-input" bind:value={formData.year} required placeholder="e.g., 3rd Year" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="course" class="form-label">Department or Course</label>
+                            <input id="course" type="text" class="form-input" bind:value={formData.departmentOrCourse} required placeholder="e.g., Computer Science" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="section" class="form-label">Section</label>
+                            <input id="section" type="text" class="form-input" bind:value={formData.section} required placeholder="e.g., Section A" />
+                        </div>
+
+                        <button type="submit" class="submit-btn" disabled={saving}>
+                            {#if saving}
+                                <div class="btn-spinner"></div>
+                                <span>Saving...</span>
+                            {:else}
+                                <IconCheck size={20} stroke={2} />
+                                <span>Update Profile</span>
+                            {/if}
+                        </button>
+                    </form>
+                </div>
+            {/if}
+
+            <!-- Customization Tab -->
+            {#if activeTab === 'customize'}
+                <div class="profile-card apple-animate-in">
+                    <div class="card-header">
+                        <div class="header-icon header-icon-purple"><IconPalette size={24} stroke={1.5} /></div>
+                        <div class="header-text">
+                            <h2 class="card-title">Customize</h2>
+                            <p class="card-subtitle">Personalize your experience</p>
+                        </div>
+                    </div>
+
+                    <ProfileCustomization {user} {userProfile} />
+                </div>
+            {/if}
+
+            <!-- Notifications Tab -->
+            {#if activeTab === 'notifications'}
+                <div class="profile-card apple-animate-in">
+                    <div class="card-header">
+                        <div class="header-icon header-icon-orange"><IconBell size={24} stroke={1.5} /></div>
+                        <div class="header-text">
+                            <h2 class="card-title">Notifications & Alerts</h2>
+                            <p class="card-subtitle">Manage your notification preferences</p>
+                        </div>
+                    </div>
+
+                    <NotificationsCenter {user} {userProfile} />
+                </div>
+            {/if}
+
+            <!-- Privacy Tab -->
+            {#if activeTab === 'privacy'}
+                <div class="profile-card apple-animate-in">
+                    <div class="card-header">
+                        <div class="header-icon header-icon-green"><IconShieldLock size={24} stroke={1.5} /></div>
+                        <div class="header-text">
+                            <h2 class="card-title">Privacy & Data Permissions</h2>
+                            <p class="card-subtitle">Control your data and privacy settings</p>
+                        </div>
+                    </div>
+
+                    <PrivacySettings {user} {userProfile} />
+                </div>
+            {/if}
+        {/if}
+    </div>
 </div>
+
+<style>
+    .profile-page { min-height: 100%; padding: clamp(16px, 4vw, 40px); background: var(--theme-bg, var(--apple-light-bg)); }
+    .profile-content { max-width: 640px; margin: 0 auto; }
+    .page-header { margin-bottom: clamp(16px, 3vw, 24px); }
+    .page-title { font-size: clamp(28px, 5vw, 36px); font-weight: 700; color: var(--theme-text, var(--apple-black)); letter-spacing: -0.5px; margin-bottom: 6px; }
+    .page-subtitle { font-size: clamp(14px, 2vw, 16px); color: var(--theme-text-secondary, var(--apple-gray-1)); }
+    
+    /* Tab Navigation */
+    .tab-nav {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 20px;
+        padding: 4px;
+        background: var(--theme-card-bg, var(--apple-white));
+        border-radius: var(--apple-radius-lg);
+        box-shadow: var(--apple-shadow-sm);
+    }
+
+    .tab-btn {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 12px 16px;
+        background: transparent;
+        border: none;
+        border-radius: var(--apple-radius-md);
+        color: var(--theme-text-secondary, var(--apple-gray-1));
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: var(--apple-transition);
+    }
+
+    .tab-btn:hover {
+        color: var(--theme-text, var(--apple-black));
+        background: var(--theme-border-light, var(--apple-gray-6));
+    }
+
+    .tab-active {
+        background: var(--apple-accent);
+        color: white !important;
+    }
+
+    .tab-active:hover {
+        background: var(--apple-accent-hover);
+    }
+
+    .profile-card { background: var(--theme-card-bg, var(--apple-white)); border-radius: var(--apple-radius-xl); box-shadow: var(--apple-shadow-md); padding: clamp(24px, 5vw, 36px); }
+    .loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; }
+    .loading-text { margin-top: 16px; font-size: 15px; color: var(--theme-text-secondary, var(--apple-gray-1)); }
+    .card-header { display: flex; align-items: center; gap: 16px; margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--theme-border-light, var(--apple-gray-5)); }
+    .header-icon { width: 48px; height: 48px; border-radius: 14px; background: rgba(0, 122, 255, 0.1); display: flex; align-items: center; justify-content: center; color: var(--apple-accent); }
+    .header-icon-purple { background: rgba(175, 82, 222, 0.1); color: #AF52DE; }
+    .header-icon-orange { background: rgba(255, 149, 0, 0.1); color: #FF9500; }
+    .header-icon-green { background: rgba(52, 199, 89, 0.1); color: #34C759; }
+    .card-title { font-size: 20px; font-weight: 600; color: var(--theme-text, var(--apple-black)); margin-bottom: 4px; }
+    .card-subtitle { font-size: 14px; color: var(--theme-text-secondary, var(--apple-gray-1)); }
+    .alert { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: var(--apple-radius-md); margin-bottom: 20px; font-size: 14px; font-weight: 500; }
+    .alert-success { background: rgba(52, 199, 89, 0.1); color: #1D7A34; border: 1px solid rgba(52, 199, 89, 0.2); }
+    .alert-error { background: rgba(255, 59, 48, 0.1); color: #C41E16; border: 1px solid rgba(255, 59, 48, 0.2); }
+    .profile-form { display: flex; flex-direction: column; gap: 20px; }
+    .form-group { display: flex; flex-direction: column; gap: 8px; }
+    .form-label { font-size: 14px; font-weight: 500; color: var(--theme-text-secondary, var(--apple-gray-1)); }
+    .form-input { width: 100%; padding: 14px 16px; border: 1px solid var(--theme-border, var(--apple-gray-4)); border-radius: var(--apple-radius-md); font-size: 16px; color: var(--theme-text, var(--apple-black)); background: var(--theme-card-bg, var(--apple-white)); transition: var(--apple-transition); }
+    .form-input:focus { outline: none; border-color: var(--apple-accent); box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15); }
+    .form-input::placeholder { color: var(--theme-text-secondary, var(--apple-gray-3)); }
+    .submit-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 16px 24px; background: var(--apple-accent); color: white; font-size: 16px; font-weight: 600; border: none; border-radius: var(--apple-radius-md); cursor: pointer; transition: var(--apple-transition); margin-top: 8px; }
+    .submit-btn:hover:not(:disabled) { background: var(--apple-accent-hover); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0, 122, 255, 0.3); }
+    .submit-btn:disabled { background: var(--apple-gray-3); cursor: not-allowed; }
+    .btn-spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+</style>

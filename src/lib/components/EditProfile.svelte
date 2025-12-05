@@ -2,7 +2,6 @@
     import { db, USER_PROFILE_PATH } from "$lib/firebase";
     import { ref, get, update } from "firebase/database";
     import { IconUser, IconCheck, IconAlertTriangle } from "@tabler/icons-svelte";
-    import { onDestroy } from "svelte";
 
     export let user;
 
@@ -10,36 +9,21 @@
     let saving = false;
     let saveSuccess = false;
     let saveError = "";
-    let formData = {
-        name: "",
-        year: "",
-        departmentOrCourse: "",
-        section: ""
-    };
+    let formData = { name: "", year: "", departmentOrCourse: "", section: "" };
 
-    $: if (user) {
-        console.log("User received. Attempting to load profile for UID:", user.uid);
-        loadProfile();
-    } else {
-        console.log("User is null/undefined. Profile load skipped.");
-        formData = { name: "", year: "", departmentOrCourse: "", section: "" };
-    }
+    $: if (user) { loadProfile(); } 
+    else { formData = { name: "", year: "", departmentOrCourse: "", section: "" }; }
 
     async function loadProfile() {
         loading = true;
         saveError = "";
         saveSuccess = false;
-
         try {
             const path = `${USER_PROFILE_PATH}/${user.uid}`;
             const userRef = ref(db, path);
-            console.log("Attempting to read profile from path:", path);
-
             const snapshot = await get(userRef);
-
             if (snapshot.exists()) {
                 const data = snapshot.val();
-                console.log("Profile data successfully retrieved:", data); // Log the retrieved data
                 formData = {
                     name: data.name || user.displayName || "",
                     year: data.year || "",
@@ -47,112 +31,113 @@
                     section: data.section || ""
                 };
             } else {
-                console.log(" No profile data exists at path:", path);
-
-                formData = {
-                    name: user.displayName || "",
-                    year: "",
-                    departmentOrCourse: "",
-                    section: ""
-                };
+                formData = { name: user.displayName || "", year: "", departmentOrCourse: "", section: "" };
             }
         } catch (e) {
-            console.error(" Error loading profile (Check Firebase connection/rules):", e);
+            console.error("Error loading profile:", e);
             saveError = "Failed to load profile.";
         }
-
         loading = false;
     }
 
     async function updateProfile() {
         if (!user || saving) return;
-
         saveError = "";
         saveSuccess = false;
         saving = true;
-
         try {
             if (!formData.name || !formData.year || !formData.departmentOrCourse || !formData.section) {
                 throw new Error("All fields are required.");
             }
-
             const userRef = ref(db, `${USER_PROFILE_PATH}/${user.uid}`);
             await update(userRef, formData);
-
             saveSuccess = true;
             setTimeout(() => saveSuccess = false, 3000);
         } catch (e) {
             console.error(e);
             saveError = e.message;
         }
-
         saving = false;
     }
 </script>
 
-<div class="w-full max-w-xl mx-auto bg-white p-8 rounded-xl shadow-xl border border-indigo-200">
-    <div class="flex items-center gap-3 mb-6">
-        <IconUser class="w-10 h-10 text-indigo-600" />
-        <h1 class="text-3xl font-bold">Edit Profile</h1>
+<div class="edit-profile-card apple-animate-in">
+    <div class="card-header">
+        <div class="header-icon"><IconUser size={24} stroke={1.5} /></div>
+        <h1 class="card-title">Edit Profile</h1>
     </div>
 
     {#if loading}
-        <p class="text-center text-gray-600">Loading user details...</p>
+        <div class="loading-state">
+            <div class="apple-spinner"></div>
+            <p>Loading user details...</p>
+        </div>
     {:else}
         {#if saveSuccess}
-            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-                Profile updated successfully!
+            <div class="alert alert-success apple-animate-in">
+                <IconCheck size={18} stroke={2} />
+                <span>Profile updated successfully!</span>
             </div>
         {/if}
 
         {#if saveError}
-            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 flex items-center gap-2">
-                <IconAlertTriangle class="w-5 h-5" /> {saveError}
+            <div class="alert alert-error apple-animate-in">
+                <IconAlertTriangle size={18} stroke={2} />
+                <span>{saveError}</span>
             </div>
         {/if}
 
-        <form on:submit|preventDefault={updateProfile} class="space-y-4">
-            <div>
-                <label for="name" class="font-medium text-gray-700">Full Name</label>
-                <input id="name" class="w-full mt-1 p-2 border rounded"
-                    type="text"
-                    bind:value={formData.name}
-                    required />
+        <form on:submit|preventDefault={updateProfile} class="profile-form">
+            <div class="form-group">
+                <label for="name" class="form-label">Full Name</label>
+                <input id="name" type="text" class="form-input" bind:value={formData.name} required />
             </div>
 
-            <div>
-                <label for="year" class="font-medium text-gray-700">Year / Level</label>
-                <input id="year" class="w-full mt-1 p-2 border rounded"
-                    type="text"
-                    bind:value={formData.year}
-                    required />
+            <div class="form-group">
+                <label for="year" class="form-label">Year / Level</label>
+                <input id="year" type="text" class="form-input" bind:value={formData.year} required />
             </div>
 
-            <div>
-                <label for="course" class="font-medium text-gray-700">Department or Course</label>
-                <input id="course" class="w-full mt-1 p-2 border rounded"
-                    type="text"
-                    bind:value={formData.departmentOrCourse}
-                    required />
+            <div class="form-group">
+                <label for="course" class="form-label">Department or Course</label>
+                <input id="course" type="text" class="form-input" bind:value={formData.departmentOrCourse} required />
             </div>
 
-            <div>
-                <label for="section" class="font-medium text-gray-700">Section</label>
-                <input id="section" class="w-full mt-1 p-2 border rounded"
-                    type="text"
-                    bind:value={formData.section}
-                    required />
+            <div class="form-group">
+                <label for="section" class="form-label">Section</label>
+                <input id="section" type="text" class="form-input" bind:value={formData.section} required />
             </div>
 
-            <button type="submit" disabled={saving}
-                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-lg font-medium transition disabled:opacity-50 flex items-center justify-center gap-2">
+            <button type="submit" class="submit-btn" disabled={saving}>
                 {#if saving}
-                    Saving...
+                    <div class="btn-spinner"></div>
+                    <span>Saving...</span>
                 {:else}
-                    <IconCheck class="w-5 h-5" /> Update Profile
+                    <IconCheck size={18} stroke={2} />
+                    <span>Update Profile</span>
                 {/if}
             </button>
         </form>
-
     {/if}
 </div>
+
+<style>
+    .edit-profile-card { width: 100%; max-width: 560px; margin: 0 auto; background: var(--apple-white); border-radius: var(--apple-radius-xl); box-shadow: var(--apple-shadow-md); padding: clamp(24px, 5vw, 36px); }
+    .card-header { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--apple-gray-5); }
+    .header-icon { width: 48px; height: 48px; border-radius: 14px; background: rgba(0, 122, 255, 0.1); display: flex; align-items: center; justify-content: center; color: var(--apple-accent); }
+    .card-title { font-size: 24px; font-weight: 700; color: var(--apple-black); }
+    .loading-state { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 40px 0; color: var(--apple-gray-1); font-size: 15px; }
+    .alert { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-radius: var(--apple-radius-md); margin-bottom: 20px; font-size: 14px; font-weight: 500; }
+    .alert-success { background: rgba(52, 199, 89, 0.1); color: #1D7A34; border: 1px solid rgba(52, 199, 89, 0.2); }
+    .alert-error { background: rgba(255, 59, 48, 0.1); color: #C41E16; border: 1px solid rgba(255, 59, 48, 0.2); }
+    .profile-form { display: flex; flex-direction: column; gap: 18px; }
+    .form-group { display: flex; flex-direction: column; gap: 8px; }
+    .form-label { font-size: 14px; font-weight: 500; color: var(--apple-gray-1); }
+    .form-input { width: 100%; padding: 14px 16px; border: 1px solid var(--apple-gray-4); border-radius: var(--apple-radius-md); font-size: 16px; color: var(--apple-black); background: var(--apple-white); transition: var(--apple-transition); }
+    .form-input:focus { outline: none; border-color: var(--apple-accent); box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15); }
+    .submit-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 16px 24px; background: var(--apple-accent); color: white; font-size: 16px; font-weight: 600; border: none; border-radius: var(--apple-radius-md); cursor: pointer; transition: var(--apple-transition); margin-top: 8px; }
+    .submit-btn:hover:not(:disabled) { background: var(--apple-accent-hover); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0, 122, 255, 0.3); }
+    .submit-btn:disabled { background: var(--apple-gray-3); cursor: not-allowed; }
+    .btn-spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+</style>

@@ -1,7 +1,11 @@
-import { adminAuth } from '$lib/server/firebase-admin';
-import { getDatabase } from 'firebase-admin/database';
+import { adminAuth, adminDb } from '$lib/server/firebase-admin';
 
 export async function load({ cookies }) {
+    // If Firebase Admin is not configured, return empty and let client handle it
+    if (!adminAuth || !adminDb) {
+        return { records: [] };
+    }
+
     const sessionCookie = cookies.get('session');
     
     if (!sessionCookie) {
@@ -11,8 +15,7 @@ export async function load({ cookies }) {
     try {
         const decodedClaims = await adminAuth.verifySessionCookie(sessionCookie, true);
         const userId = decodedClaims.uid;
-        const db = getDatabase();
-        const attendanceRef = db.ref(`attendance/${userId}`);
+        const attendanceRef = adminDb.ref(`attendance/${userId}`);
         const snapshot = await attendanceRef.orderByChild('date').once('value');
 
         const records = [];
@@ -26,9 +29,11 @@ export async function load({ cookies }) {
                     date: data.date,
                     currentStatus: data.currentStatus,
                     checkIn: data.checkIn || null,
-                    breakStart: data.breakStart || null,
-                    breakEnd: data.breakEnd || null,
+                    breakStart: data.breakStart || data.breakIn || null,
+                    breakEnd: data.breakEnd || data.breakOut || null,
                     checkOut: data.checkOut || null,
+                    manualCorrection: data.manualCorrection || false,
+                    correctedBy: data.correctedBy || null
                 });
             });
         }
@@ -39,13 +44,9 @@ export async function load({ cookies }) {
             return dateB.getTime() - dateA.getTime();
         });
 
-        return {
-            records
-        };
+        return { records };
     } catch (error) {
         console.error('Error loading attendance history:', error);
-        return {
-            records: []
-        };
+        return { records: [] };
     }
 }

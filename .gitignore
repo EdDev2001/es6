@@ -18,6 +18,12 @@ Thumbs.db
 !.env.example
 !.env.test
 
+# Firebase credentials
+*-firebase-adminsdk-*.json
+
+# Privacy/sensitive data
+privacy-*.json
+
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*

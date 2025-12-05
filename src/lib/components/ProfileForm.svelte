@@ -1,7 +1,7 @@
 <script>
     import { db, USER_PROFILE_PATH } from "$lib/firebase";
     import { ref, set } from 'firebase/database';
-    import { IconUserPlus, IconCheck } from "@tabler/icons-svelte";
+    import { IconUserPlus, IconCheck, IconArrowRight } from "@tabler/icons-svelte";
 
     export let user;
     export let onProfileComplete;
@@ -21,12 +21,10 @@
         if (isSaving) return;
         isSaving = true;
         saveError = '';
-
         try {
             if (!formData.name || !formData.year || !formData.departmentOrCourse || !formData.section) {
                 throw new Error("Please fill in all required fields.");
             }
-
             const uid = user.uid;
             const userProfileRef = ref(db, `${USER_PROFILE_PATH}/${uid}`);
             const profileData = {
@@ -40,11 +38,9 @@
                 picture: user.photoURL,
                 createdAt: new Date().toISOString()
             };
-
             await set(userProfileRef, profileData);
             profileSaved = true;
             onProfileComplete(profileData);
-
         } catch (error) {
             console.error("Failed to save profile:", error);
             saveError = error.message;
@@ -54,68 +50,86 @@
     }
 </script>
 
-<div class="w-full max-w-md bg-white p-8 rounded-xl shadow-2xl border border-indigo-200">
+<div class="profile-form-card apple-animate-in">
     {#if profileSaved}
-        <div class="text-center">
-            <IconCheck class="w-16 h-16 mx-auto text-green-600 mb-4" />
-            <h2 class="text-2xl font-bold text-gray-800 mb-2">Profile Complete!</h2>
-            <p class="text-gray-600 mb-6">Your profile has been saved successfully.</p>
-            <a 
-                href="/app/dashboard"
-                class="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition duration-200"
-            >
-                Go to Dashboard →
+        <div class="success-state">
+            <div class="success-icon"><IconCheck size={32} stroke={2} /></div>
+            <h2 class="success-title">Profile Complete!</h2>
+            <p class="success-text">Your profile has been saved successfully.</p>
+            <a href="/app/dashboard" class="success-btn">
+                <span>Go to Dashboard</span>
+                <IconArrowRight size={20} stroke={2} />
             </a>
         </div>
     {:else}
-        <div class="text-center mb-6">
-            <IconUserPlus class="w-10 h-10 mx-auto text-indigo-600 mb-2" />
-            <h2 class="text-2xl font-bold text-gray-800">Complete Your Profile</h2>
-            <p class="text-sm text-gray-500">
-                This one-time setup is required to access the system.
-            </p>
+        <div class="form-header">
+            <div class="header-icon"><IconUserPlus size={28} stroke={1.5} /></div>
+            <h2 class="form-title">Complete Your Profile</h2>
+            <p class="form-subtitle">This one-time setup is required to access the system.</p>
         </div>
 
         {#if saveError}
-            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-                <p class="text-sm font-medium">{saveError}</p>
+            <div class="error-alert apple-animate-in">
+                <span>{saveError}</span>
             </div>
         {/if}
 
-        <form on:submit|preventDefault={saveProfile} class="space-y-4">
-            <div>
-                <label for="name" class="block text-sm font-medium text-gray-700">Full Name</label>
-                <input id="name" type="text" bind:value={formData.name} required
-                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border" />
+        <form on:submit|preventDefault={saveProfile} class="profile-form">
+            <div class="form-group">
+                <label for="name" class="form-label">Full Name</label>
+                <input id="name" type="text" class="form-input" bind:value={formData.name} required placeholder="Enter your full name" />
             </div>
 
-            <div>
-                <label for="year" class="block text-sm font-medium text-gray-700">Year / Level</label>
-                <input id="year" type="text" bind:value={formData.year} required
-                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border" />
+            <div class="form-group">
+                <label for="year" class="form-label">Year / Level</label>
+                <input id="year" type="text" class="form-input" bind:value={formData.year} required placeholder="e.g., 3rd Year" />
             </div>
 
-            <div>
-                <label for="course" class="block text-sm font-medium text-gray-700">Department or Course</label>
-                <input id="course" type="text" bind:value={formData.departmentOrCourse} required
-                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border" />
+            <div class="form-group">
+                <label for="course" class="form-label">Department or Course</label>
+                <input id="course" type="text" class="form-input" bind:value={formData.departmentOrCourse} required placeholder="e.g., Computer Science" />
             </div>
 
-            <div>
-                <label for="section" class="block text-sm font-medium text-gray-700">Section</label>
-                <input id="section" type="text" bind:value={formData.section} required
-                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border" />
+            <div class="form-group">
+                <label for="section" class="form-label">Section</label>
+                <input id="section" type="text" class="form-input" bind:value={formData.section} required placeholder="e.g., Section A" />
             </div>
 
-            <button type="submit" disabled={isSaving}
-                    class="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 transition-all duration-200">
+            <button type="submit" class="submit-btn" disabled={isSaving}>
                 {#if isSaving}
-                    Saving Profile...
+                    <div class="btn-spinner"></div>
+                    <span>Saving Profile...</span>
                 {:else}
-                    <IconCheck class="w-5 h-5 mr-2" />
-                    Save and Continue
+                    <IconCheck size={20} stroke={2} />
+                    <span>Save and Continue</span>
                 {/if}
             </button>
         </form>
     {/if}
 </div>
+
+<style>
+    .profile-form-card { width: 100%; max-width: 420px; background: var(--apple-white); border-radius: var(--apple-radius-xl); box-shadow: var(--apple-shadow-lg); padding: clamp(28px, 5vw, 40px); }
+    .form-header { text-align: center; margin-bottom: 28px; }
+    .header-icon { width: 64px; height: 64px; margin: 0 auto 16px; border-radius: 16px; background: linear-gradient(135deg, var(--apple-accent), #5856D6); display: flex; align-items: center; justify-content: center; color: white; box-shadow: 0 8px 24px rgba(0, 122, 255, 0.25); }
+    .form-title { font-size: 24px; font-weight: 700; color: var(--apple-black); margin-bottom: 8px; }
+    .form-subtitle { font-size: 14px; color: var(--apple-gray-1); }
+    .error-alert { padding: 14px 18px; background: rgba(255, 59, 48, 0.1); border: 1px solid rgba(255, 59, 48, 0.2); border-radius: var(--apple-radius-md); color: #C41E16; font-size: 14px; margin-bottom: 20px; }
+    .profile-form { display: flex; flex-direction: column; gap: 18px; }
+    .form-group { display: flex; flex-direction: column; gap: 8px; }
+    .form-label { font-size: 14px; font-weight: 500; color: var(--apple-gray-1); }
+    .form-input { width: 100%; padding: 14px 16px; border: 1px solid var(--apple-gray-4); border-radius: var(--apple-radius-md); font-size: 16px; color: var(--apple-black); background: var(--apple-white); transition: var(--apple-transition); }
+    .form-input:focus { outline: none; border-color: var(--apple-accent); box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15); }
+    .form-input::placeholder { color: var(--apple-gray-3); }
+    .submit-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 16px 24px; background: var(--apple-accent); color: white; font-size: 16px; font-weight: 600; border: none; border-radius: var(--apple-radius-md); cursor: pointer; transition: var(--apple-transition); margin-top: 8px; }
+    .submit-btn:hover:not(:disabled) { background: var(--apple-accent-hover); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0, 122, 255, 0.3); }
+    .submit-btn:disabled { background: var(--apple-gray-3); cursor: not-allowed; }
+    .btn-spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .success-state { text-align: center; padding: 20px 0; }
+    .success-icon { width: 72px; height: 72px; margin: 0 auto 20px; border-radius: 50%; background: rgba(52, 199, 89, 0.1); display: flex; align-items: center; justify-content: center; color: var(--apple-green); }
+    .success-title { font-size: 24px; font-weight: 700; color: var(--apple-black); margin-bottom: 8px; }
+    .success-text { font-size: 15px; color: var(--apple-gray-1); margin-bottom: 28px; }
+    .success-btn { display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; background: var(--apple-accent); color: white; font-size: 16px; font-weight: 600; border-radius: var(--apple-radius-md); text-decoration: none; transition: var(--apple-transition); }
+    .success-btn:hover { background: var(--apple-accent-hover); transform: translateY(-1px); }
+</style>
