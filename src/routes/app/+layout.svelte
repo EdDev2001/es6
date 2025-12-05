@@ -89,6 +89,7 @@
 <header class="mobile-header">
     <div class="mobile-header-content">
         <div class="mobile-brand">
+            <img src="/logo.png" alt="Logo" class="brand-logo" />
             <span class="brand-text">Attendance System</span>
         </div>
         <button class="menu-btn" on:click={() => (sidebarOpen = true)} aria-label="Open menu">
@@ -107,7 +108,10 @@
     <aside class="sidebar" class:sidebar-open={sidebarOpen}>
         <!-- Sidebar Header -->
         <div class="sidebar-header">
-            <span class="sidebar-brand">Attendance System</span>
+            <div class="sidebar-brand-wrapper">
+                <img src="/logo.png" alt="Logo" class="sidebar-logo" />
+                <span class="sidebar-brand">Attendance System</span>
+            </div>
             <button class="close-btn" on:click={closeSidebar} aria-label="Close menu">
                 <IconX size={20} stroke={1.5} />
             </button>
@@ -222,6 +226,20 @@
         height: 60px;
     }
 
+    .mobile-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .brand-logo {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        object-fit: cover;
+        flex-shrink: 0;
+    }
+
     .brand-text {
         font-size: 18px;
         font-weight: 600;
@@ -286,6 +304,20 @@
         justify-content: space-between;
         padding: 20px 20px;
         border-bottom: 1px solid var(--theme-border-light, var(--apple-gray-5));
+    }
+
+    .sidebar-brand-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .sidebar-logo {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        object-fit: cover;
+        flex-shrink: 0;
     }
 
     .sidebar-brand {
