@@ -378,26 +378,50 @@ export async function getLeaderboard(limit = 10) {
         const usersRef = ref(db, 'users');
         const gamifRef = ref(db, 'gamification');
         const [usersSnapshot, gamifSnapshot] = await Promise.all([get(usersRef), get(gamifRef)]);
-        if (!usersSnapshot.exists() || !gamifSnapshot.exists()) return [];
+        
+        // Handle case where gamification data doesn't exist yet
+        if (!usersSnapshot.exists()) {
+            console.log('No users found in database');
+            return [];
+        }
         
         const users = usersSnapshot.val();
-        const gamification = gamifSnapshot.val();
+        const gamification = gamifSnapshot.exists() ? gamifSnapshot.val() : {};
         
-        return Object.keys(gamification)
-            .map(userId => ({
-                id: userId,
-                name: users[userId]?.name || 'Unknown',
-                profilePhoto: users[userId]?.profilePhoto || null,
-                department: users[userId]?.departmentOrCourse || null,
-                currentStreak: gamification[userId]?.currentStreak || 0,
-                longestStreak: gamification[userId]?.longestStreak || 0,
-                totalCheckIns: gamification[userId]?.totalCheckIns || 0,
-                points: gamification[userId]?.points || 0,
-                badges: gamification[userId]?.badges || [],
-                badgeCount: (gamification[userId]?.badges || []).length
-            }))
-            .sort((a, b) => b.points - a.points)
-            .slice(0, limit);
+        // Build leaderboard from users who have gamification data OR attendance data
+        const leaderboardData = [];
+        
+        // First, add users with gamification data
+        Object.keys(gamification).forEach(userId => {
+            const userData = users[userId];
+            const gamifData = gamification[userId];
+            
+            if (gamifData && (gamifData.points > 0 || gamifData.totalCheckIns > 0)) {
+                leaderboardData.push({
+                    id: userId,
+                    name: userData?.name || userData?.displayName || 'Unknown User',
+                    profilePhoto: userData?.profilePhoto || userData?.photoURL || null,
+                    department: userData?.departmentOrCourse || userData?.department || null,
+                    currentStreak: gamifData.currentStreak || 0,
+                    longestStreak: gamifData.longestStreak || 0,
+                    totalCheckIns: gamifData.totalCheckIns || 0,
+                    points: gamifData.points || 0,
+                    badges: gamifData.badges || [],
+                    badgeCount: (gamifData.badges || []).length,
+                    earlyCheckIns: gamifData.earlyCheckIns || 0,
+                    lastActive: gamifData.lastCheckInDate || null
+                });
+            }
+        });
+        
+        // Sort by points (primary) and totalCheckIns (secondary)
+        leaderboardData.sort((a, b) => {
+            if (b.points !== a.points) return b.points - a.points;
+            if (b.totalCheckIns !== a.totalCheckIns) return b.totalCheckIns - a.totalCheckIns;
+            return b.currentStreak - a.currentStreak;
+        });
+        
+        return leaderboardData.slice(0, limit);
     } catch (error) {
         console.error('Error fetching leaderboard:', error);
         return [];
