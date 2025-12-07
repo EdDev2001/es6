@@ -231,7 +231,7 @@
     /* Tab Navigation */
     .tab-nav {
         display: flex;
-        gap: 8px;
+        gap: 6px;
         margin-bottom: 20px;
         padding: 4px;
         background: var(--theme-card-bg, var(--apple-white));
@@ -244,13 +244,13 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 8px;
-        padding: 12px 16px;
+        gap: 6px;
+        padding: 12px 8px;
         background: transparent;
         border: none;
         border-radius: var(--apple-radius-md);
         color: var(--theme-text-secondary, var(--apple-gray-1));
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 500;
         cursor: pointer;
         transition: var(--apple-transition);
@@ -261,13 +261,41 @@
         background: var(--theme-border-light, var(--apple-gray-6));
     }
 
+    .tab-btn:active {
+        transform: scale(0.97);
+    }
+
     .tab-active {
         background: var(--apple-accent);
         color: white !important;
+        box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
     }
 
     .tab-active:hover {
         background: var(--apple-accent-hover);
+    }
+
+    /* Hide text on smaller screens, show only icons */
+    @media (max-width: 520px) {
+        .tab-btn {
+            padding: 12px 10px;
+        }
+
+        .tab-btn span {
+            display: none;
+        }
+
+        .tab-btn :global(svg) {
+            width: 20px;
+            height: 20px;
+        }
+    }
+
+    /* Show text on larger mobile screens */
+    @media (min-width: 521px) {
+        .tab-btn span {
+            display: inline;
+        }
     }
 
     .profile-card { background: var(--theme-card-bg, var(--apple-white)); border-radius: var(--apple-radius-xl); box-shadow: var(--apple-shadow-md); padding: clamp(24px, 5vw, 36px); }

@@ -136,77 +136,70 @@
                         </p>
                     </div>
 
-                    <!-- Late Frequency -->
-                    <div class="summary-card">
+                    <!-- Late Frequency - with Ring -->
+                    <div class="summary-card summary-card-ring">
                         <div class="card-header">
-                            <IconAlertCircle size={20} stroke={1.5} class="card-icon icon-orange" />
-                            <span class="card-label">Late Arrivals</span>
+                            <IconAlertCircle size={18} stroke={1.5} class="card-icon icon-orange" />
+                            <span class="card-label">On-Time Rate</span>
                         </div>
-                        <div class="stat-display">
-                            <span class="stat-value">{lateStats.lateCount}</span>
-                            <span class="stat-unit">times</span>
+                        <div class="ring-container-small">
+                            <AnalyticsChart 
+                                type="ring" 
+                                ringValue={100 - lateStats.latePercentage} 
+                                ringMax={100}
+                                ringLabel="{(100 - lateStats.latePercentage).toFixed(0)}%"
+                                ringSubLabel="On Time"
+                                color="orange"
+                            />
                         </div>
-                        <div class="stat-meta">
-                            <span class="meta-badge meta-orange">{lateStats.latePercentage}% of days</span>
-                        </div>
-                        {#if lateStats.avgLateMinutes > 0}
-                            <p class="card-detail">Avg. {formatMinutes(lateStats.avgLateMinutes)} late</p>
-                        {/if}
+                        <p class="card-insight-small">
+                            {lateStats.lateCount} late ({lateStats.latePercentage}%)
+                        </p>
                     </div>
 
                     <!-- Most Late Day -->
-                    <div class="summary-card">
+                    <div class="summary-card summary-card-ring">
                         <div class="card-header">
-                            <IconCalendarStats size={20} stroke={1.5} class="card-icon icon-purple" />
+                            <IconCalendarStats size={18} stroke={1.5} class="card-icon icon-purple" />
                             <span class="card-label">Most Late Day</span>
                         </div>
-                        {#if mostLateDay}
-                            <div class="stat-display">
-                                <span class="stat-value stat-text">{mostLateDay.day}</span>
-                            </div>
-                            <p class="card-detail">{mostLateDay.count} late arrivals</p>
-                        {:else}
-                            <div class="stat-display">
-                                <span class="stat-value stat-text">None</span>
-                            </div>
-                            <p class="card-detail">No late arrivals recorded</p>
-                        {/if}
+                        <div class="stat-center">
+                            <span class="stat-value-large">{mostLateDay?.day || 'None'}</span>
+                            <span class="stat-sub">{mostLateDay ? `${mostLateDay.count} times` : 'No late days'}</span>
+                        </div>
                     </div>
 
-                    <!-- Peak Check-in -->
-                    <div class="summary-card">
+                    <!-- Peak Check-in - with Ring -->
+                    <div class="summary-card summary-card-ring">
                         <div class="card-header">
-                            <IconSun size={20} stroke={1.5} class="card-icon icon-green" />
+                            <IconSun size={18} stroke={1.5} class="card-icon icon-green" />
                             <span class="card-label">Peak Check-in</span>
                         </div>
-                        {#if peakCheckIn}
-                            <div class="stat-display">
-                                <span class="stat-value stat-text">{peakCheckIn.time}</span>
-                            </div>
-                            <p class="card-detail">{peakCheckIn.count} check-ins at this hour</p>
-                        {:else}
-                            <div class="stat-display">
-                                <span class="stat-value stat-text">--</span>
-                            </div>
-                        {/if}
+                        <div class="stat-center">
+                            <span class="stat-value-large">{peakCheckIn?.time || '--'}</span>
+                            <span class="stat-sub">{peakCheckIn ? `${peakCheckIn.count} check-ins` : 'No data'}</span>
+                        </div>
                     </div>
 
-                    <!-- Overtime -->
-                    <div class="summary-card">
+                    <!-- Overtime - with Ring -->
+                    <div class="summary-card summary-card-ring">
                         <div class="card-header">
-                            <IconFlame size={20} stroke={1.5} class="card-icon icon-red" />
+                            <IconFlame size={18} stroke={1.5} class="card-icon icon-red" />
                             <span class="card-label">Overtime</span>
                         </div>
-                        <div class="stat-display">
-                            <span class="stat-value">{overtimeStats.totalHours}</span>
-                            <span class="stat-unit">hours</span>
+                        <div class="ring-container-small">
+                            <AnalyticsChart 
+                                type="ring" 
+                                ringValue={Math.min(overtimeStats.overtimeDays, parseInt(selectedPeriod))} 
+                                ringMax={parseInt(selectedPeriod)}
+                                ringLabel="{overtimeStats.totalHours}h"
+                                ringSubLabel="Total OT"
+                                color="red"
+                            />
                         </div>
-                        <div class="stat-meta">
-                            <span class="meta-badge meta-red">{overtimeStats.overtimeDays} days</span>
-                        </div>
-                        {#if overtimeStats.avgOvertimePerDay > 0}
-                            <p class="card-detail">Avg. {formatMinutes(overtimeStats.avgOvertimePerDay)}/day</p>
-                        {/if}
+                        <p class="card-insight-small">
+                            {overtimeStats.overtimeDays} days • Avg {formatMinutes(overtimeStats.avgOvertimePerDay)}/day
+                        </p>
                     </div>
                 </div>
             </section>
@@ -369,9 +362,11 @@
     .summary-card {
         background: var(--apple-white);
         border-radius: var(--apple-radius-lg);
-        padding: 16px;
+        padding: clamp(14px, 3vw, 20px);
         box-shadow: var(--apple-shadow-sm);
         transition: transform 0.2s ease, box-shadow 0.2s ease;
+        display: flex;
+        flex-direction: column;
     }
     .summary-card:hover {
         transform: translateY(-2px);
@@ -379,8 +374,10 @@
     }
     .summary-card-large {
         grid-column: span 1;
-        display: flex;
-        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+    .summary-card-ring {
         align-items: center;
         text-align: center;
     }
@@ -388,12 +385,13 @@
     .card-header {
         display: flex;
         align-items: center;
-        gap: 8px;
-        margin-bottom: 12px;
+        justify-content: center;
+        gap: 6px;
+        margin-bottom: 10px;
         width: 100%;
     }
     .card-label {
-        font-size: 12px;
+        font-size: clamp(9px, 2vw, 11px);
         font-weight: 600;
         color: var(--apple-gray-1);
         text-transform: uppercase;
@@ -407,6 +405,11 @@
     :global(.icon-red) { color: #FF3B30; }
 
     .ring-container { margin: 8px 0 12px; }
+    .ring-container-small { 
+        margin: 6px 0 10px;
+        transform: scale(0.85);
+        transform-origin: center;
+    }
 
     .stat-display {
         display: flex;
@@ -415,16 +418,37 @@
         margin-bottom: 8px;
     }
     .stat-value {
-        font-size: 32px;
+        font-size: clamp(24px, 5vw, 32px);
         font-weight: 700;
         color: var(--apple-black);
         line-height: 1;
     }
-    .stat-value.stat-text { font-size: 22px; }
+    .stat-value.stat-text { font-size: clamp(18px, 4vw, 22px); }
     .stat-unit {
-        font-size: 14px;
+        font-size: clamp(12px, 2vw, 14px);
         font-weight: 500;
         color: var(--apple-gray-1);
+    }
+
+    /* Centered stat display for cards without rings */
+    .stat-center {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 0;
+    }
+    .stat-value-large {
+        font-size: clamp(20px, 4vw, 26px);
+        font-weight: 700;
+        color: var(--apple-black);
+        line-height: 1.2;
+    }
+    .stat-sub {
+        font-size: clamp(10px, 2vw, 12px);
+        color: var(--apple-gray-2);
+        margin-top: 4px;
     }
 
     .stat-meta { margin-bottom: 8px; }
@@ -439,13 +463,18 @@
     .meta-red { background: rgba(255, 59, 48, 0.12); color: #FF3B30; }
 
     .card-detail {
-        font-size: 12px;
+        font-size: clamp(10px, 2vw, 12px);
         color: var(--apple-gray-2);
     }
     .card-insight {
-        font-size: 13px;
+        font-size: clamp(11px, 2vw, 13px);
         color: var(--apple-gray-1);
         font-weight: 500;
+    }
+    .card-insight-small {
+        font-size: clamp(9px, 1.8vw, 11px);
+        color: var(--apple-gray-2);
+        margin-top: auto;
     }
 
     /* Chart Section */
@@ -563,13 +592,36 @@
     }
 
     /* Responsive */
-    @media (min-width: 640px) {
+    @media (max-width: 480px) {
+        .summary-grid { 
+            grid-template-columns: repeat(2, 1fr); 
+            gap: 10px;
+        }
         .summary-card-large { grid-column: span 2; }
+        .ring-container-small { transform: scale(0.75); }
+        .card-header { margin-bottom: 6px; }
+    }
+
+    @media (min-width: 481px) and (max-width: 639px) {
+        .summary-grid { 
+            grid-template-columns: repeat(2, 1fr); 
+            gap: 12px;
+        }
+        .summary-card-large { grid-column: span 2; }
+    }
+
+    @media (min-width: 640px) and (max-width: 767px) {
         .summary-grid { grid-template-columns: repeat(3, 1fr); }
+        .summary-card-large { grid-column: span 1; }
     }
 
     @media (min-width: 768px) {
         .summary-grid { grid-template-columns: repeat(5, 1fr); }
         .summary-card-large { grid-column: span 1; }
+        .ring-container-small { transform: scale(0.9); }
+    }
+
+    @media (min-width: 1024px) {
+        .ring-container-small { transform: scale(1); }
     }
 </style>

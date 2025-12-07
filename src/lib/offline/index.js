@@ -11,3 +11,6 @@ export {
     setupAutoSync,
     isOffline
 } from './offlineQueue.js';
+
+// Components
+export { default as OfflineStatus } from './OfflineStatus.svelte';

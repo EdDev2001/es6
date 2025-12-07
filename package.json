@@ -5,6 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
+		"dev:http": "vite dev --https=false --port=3000",
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
@@ -44,6 +45,7 @@
 		"@tabler/icons-svelte": "^3.35.0",
 		"date-fns": "^4.1.0",
 		"firebase": "^12.6.0",
-		"firebase-admin": "^13.6.0"
+		"firebase-admin": "^13.6.0",
+		"nodemailer": "^7.0.11"
 	}
 }

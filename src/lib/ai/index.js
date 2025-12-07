@@ -12,3 +12,15 @@ export {
     analyzeFaceSimilarity,
     generateBehaviorReport
 } from './behaviorAnalysis.js';
+
+// Smart Leave Suggestions
+export {
+    SuggestionType,
+    SuggestionPriority,
+    SmartLeaveSuggestionsEngine,
+    getUserLeaveBalance,
+    dismissSuggestion,
+    getDismissedSuggestions,
+    logSuggestionAction,
+    getSmartSuggestions
+} from './smartLeaveSuggestions.js';

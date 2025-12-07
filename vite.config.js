@@ -7,7 +7,12 @@ export default defineConfig({
 	plugins: [tailwindcss(), sveltekit(), basicSsl()],
 	server: {
         https: true,
-        host: '0.0.0.0', 
+        host: '0.0.0.0',
+        port: 5173
+    },
+    preview: {
+        https: false,
+        port: 4173
     },
 	test: {
 		projects: [
