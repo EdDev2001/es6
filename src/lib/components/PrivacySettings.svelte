@@ -101,15 +101,26 @@
         
         isDownloading = true;
         
-        // APK URL - you can host your APK file and put the URL here
-        const apkUrl = appConfig.apkUrl || '/downloads/attendance-system.apk';
-            } else {
-                installError = result.error;
-            }
-            showManualGuide = true;
+        try {
+            // APK URL - you can host your APK file and put the URL here
+            const apkUrl = appConfig.apkUrl || '/downloads/attendance-system.apk';
+            
+            // Create download link
+            const link = document.createElement('a');
+            link.href = apkUrl;
+            link.download = 'attendance-system.apk';
+            link.target = '_blank';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            downloadStatus = 'success';
+        } catch (e) {
+            downloadStatus = 'error';
+            downloadError = e.message || 'Download failed. Please try again.';
         }
         
-        isInstalling = false;
+        isDownloading = false;
     }
 
     const dataCollectionItems = [
@@ -406,7 +417,6 @@
                         <span>If prompted, enable "Install from unknown sources" in Settings</span>
                     </p>
                 </div>
-            </div>
 
                 <!-- QR Code for Desktop -->
                 {#if !device.isMobile && qrCodeUrl}
@@ -608,11 +618,42 @@
     .manual-guide-card { padding: 14px 16px; background: var(--theme-border-light); border-radius: var(--apple-radius-md); animation: slideDown 0.2s ease; }
     .manual-intro { margin: 0; font-size: 14px; color: var(--theme-text); font-weight: 500; text-align: center; }
 
-    .qr-section { padding: 20px; background: var(--theme-border-light, var(--apple-gray-6)); border-radius: var(--apple-radius-md); text-align: center; }
+    .qr-section { padding: 20px; background: var(--theme-border-light, var(--apple-gray-6)); border-radius: var(--apple-radius-md); text-align: center; margin-top: 16px; }
     .qr-header { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 15px; font-weight: 600; color: var(--theme-text, var(--apple-black)); margin-bottom: 16px; }
     .qr-container { display: inline-block; padding: 12px; background: white; border-radius: var(--apple-radius-md); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
     .qr-image { width: 160px; height: 160px; display: block; }
     .qr-hint { font-size: 12px; color: var(--theme-text-secondary, var(--apple-gray-1)); margin: 12px 0 0 0; }
+
+    /* New App Download Section */
+    .app-card-main { display: flex; align-items: center; gap: 16px; padding: 20px; background: var(--theme-card-bg, white); border-radius: var(--apple-radius-lg); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08); }
+    .app-card-icon { width: 80px; height: 80px; border-radius: 18px; object-fit: cover; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15); flex-shrink: 0; }
+    .app-card-info { flex: 1; }
+    .app-card-name { font-size: 20px; font-weight: 700; color: var(--theme-text); margin: 0 0 4px 0; }
+    .app-card-dev { font-size: 13px; color: var(--theme-text-secondary); margin: 0 0 8px 0; }
+    .app-card-meta { display: flex; gap: 12px; }
+    .app-version, .app-size { font-size: 12px; color: var(--theme-text-secondary); background: var(--theme-border-light); padding: 4px 10px; border-radius: 12px; }
+
+    .app-features-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .feature-box { display: flex; align-items: center; gap: 10px; padding: 14px; background: var(--theme-border-light); border-radius: var(--apple-radius-md); }
+    .feature-icon { font-size: 20px; }
+    .feature-label { font-size: 13px; font-weight: 500; color: var(--theme-text); }
+
+    .download-app-btn { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; padding: 18px 24px; background: linear-gradient(135deg, #34C759, #30B350); color: white; border: none; border-radius: var(--apple-radius-lg); font-size: 17px; font-weight: 600; cursor: pointer; transition: var(--apple-transition); box-shadow: 0 4px 16px rgba(52, 199, 89, 0.3); }
+    .download-app-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(52, 199, 89, 0.4); }
+    .download-app-btn:active:not(:disabled) { transform: scale(0.98); }
+    .download-app-btn:disabled { opacity: 0.7; cursor: wait; }
+
+    .download-status { display: flex; align-items: flex-start; gap: 10px; padding: 14px 16px; border-radius: var(--apple-radius-md); font-size: 14px; line-height: 1.4; }
+    .download-success { background: rgba(52, 199, 89, 0.1); color: var(--apple-green); }
+    .download-error { background: rgba(255, 59, 48, 0.1); color: var(--apple-red); }
+    .download-status:not(.download-success):not(.download-error) { background: rgba(0, 122, 255, 0.1); color: var(--apple-accent); }
+
+    .install-instructions { padding: 16px; background: var(--theme-border-light); border-radius: var(--apple-radius-md); }
+    .instructions-title { font-size: 14px; font-weight: 600; color: var(--theme-text); margin: 0 0 12px 0; }
+    .instruction-steps { display: flex; flex-direction: column; gap: 10px; }
+    .instruction-step { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--theme-text-secondary); }
+    .step-num { width: 24px; height: 24px; background: var(--apple-accent); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+    .security-note { display: flex; align-items: center; gap: 8px; margin: 12px 0 0 0; padding: 10px 12px; background: rgba(255, 149, 0, 0.1); border-radius: var(--apple-radius-sm); font-size: 12px; color: var(--apple-orange); }
 
     @media (max-width: 480px) {
         .section-nav { flex-direction: row; overflow-x: auto; gap: 0; }
