@@ -29,6 +29,9 @@
     let canInstall = false;
     let showIOSGuide = false;
     let showManualGuide = false;
+    let isDownloading = false;
+    let downloadStatus = '';
+    let downloadError = '';
 
     $: settings = $privacyStore;
 
@@ -78,28 +81,28 @@
         qrCodeUrl = generateQRCodeDataUrl(window.location.origin, 160);
     }
 
-    // Direct install handler
+    // Direct install handler (legacy - kept for compatibility)
     async function handleDirectInstall() {
-        if (isInstalling) return;
-        installError = '';
+        handleDownloadApp();
+    }
+
+    // Download APK handler
+    async function handleDownloadApp() {
+        if (isDownloading) return;
         
-        // For iOS, show the guide since it doesn't support beforeinstallprompt
+        downloadStatus = '';
+        downloadError = '';
+        
+        // iOS doesn't support APK
         if (device.isIOS) {
-            showIOSGuide = true;
+            downloadStatus = 'ios';
             return;
         }
         
-        // Try direct PWA install for Android/Desktop
-        isInstalling = true;
-        const result = await installPWA();
+        isDownloading = true;
         
-        if (result.success) {
-            showSuccess('App installed successfully!');
-            canInstall = false;
-        } else {
-            // If direct install fails, show manual guide
-            if (device.isAndroid) {
-                installError = 'Tap the browser menu (⋮) and select "Add to Home screen"';
+        // APK URL - you can host your APK file and put the URL here
+        const apkUrl = appConfig.apkUrl || '/downloads/attendance-system.apk';
             } else {
                 installError = result.error;
             }
@@ -317,124 +320,93 @@
 
         {#if activeSection === 'getapp'}
             <div class="content-header">
-                <h3>Get Mobile App</h3>
-                <p>Download and install for the best experience</p>
+                <h3>Mobile App</h3>
+                <p>Download and install the native app</p>
             </div>
             
             <div class="app-download-section">
-                <!-- App Store Style Card -->
-                <div class="app-store-card">
-                    <img src={appConfig.icon} alt="{appConfig.name}" class="app-store-icon" />
-                    <div class="app-store-info">
-                        <h4 class="app-store-name">{appConfig.name}</h4>
-                        <p class="app-store-developer">Enterprise Attendance Solution</p>
-                        <div class="app-store-rating">
-                            <span class="stars">★★★★★</span>
-                            <span class="rating-text">5.0</span>
+                <!-- App Card -->
+                <div class="app-card-main">
+                    <img src={appConfig.icon} alt="{appConfig.name}" class="app-card-icon" />
+                    <div class="app-card-info">
+                        <h4 class="app-card-name">{appConfig.name}</h4>
+                        <p class="app-card-dev">Enterprise Attendance Solution</p>
+                        <div class="app-card-meta">
+                            <span class="app-version">v1.0.0</span>
+                            <span class="app-size">~15 MB</span>
                         </div>
                     </div>
-                    {#if device.isStandalone}
-                        <div class="app-installed-chip">
-                            <IconCheck size={14} />
-                            <span>Installed</span>
-                        </div>
+                </div>
+
+                <!-- Features -->
+                <div class="app-features-grid">
+                    <div class="feature-box">
+                        <span class="feature-icon">⚡</span>
+                        <span class="feature-label">Fast & Native</span>
+                    </div>
+                    <div class="feature-box">
+                        <span class="feature-icon">📴</span>
+                        <span class="feature-label">Works Offline</span>
+                    </div>
+                    <div class="feature-box">
+                        <span class="feature-icon">🔔</span>
+                        <span class="feature-label">Push Alerts</span>
+                    </div>
+                    <div class="feature-box">
+                        <span class="feature-icon">🔒</span>
+                        <span class="feature-label">Secure</span>
+                    </div>
+                </div>
+
+                <!-- Download Button -->
+                <button class="download-app-btn" on:click={handleDownloadApp} disabled={isDownloading}>
+                    {#if isDownloading}
+                        <IconLoader2 size={22} class="spinner" />
+                        <span>Downloading...</span>
                     {:else}
-                        <button class="app-get-btn" on:click={handleDirectInstall} disabled={isInstalling}>
-                            {#if isInstalling}
-                                <IconLoader2 size={16} class="spinner" />
-                            {:else}
-                                GET
-                            {/if}
-                        </button>
+                        <IconDownload size={22} />
+                        <span>Download App</span>
                     {/if}
-                </div>
+                </button>
 
-                <!-- App Screenshots/Features Preview -->
-                <div class="app-features-strip">
-                    <div class="feature-chip"><span>📱</span> Native Feel</div>
-                    <div class="feature-chip"><span>⚡</span> Fast</div>
-                    <div class="feature-chip"><span>📴</span> Offline</div>
-                    <div class="feature-chip"><span>🔔</span> Alerts</div>
-                </div>
-
-                {#if !device.isStandalone}
-                    <!-- Download Options -->
-                    <div class="download-options-new">
-                        {#if installError}
-                            <div class="install-message">
-                                <IconInfoCircle size={18} />
-                                <span>{installError}</span>
-                            </div>
-                        {/if}
-
-                        {#if showIOSGuide}
-                            <!-- iOS Install Guide -->
-                            <div class="install-guide-card">
-                                <div class="guide-header">
-                                    <span class="guide-title">📲 Install on iPhone/iPad</span>
-                                    <button class="guide-close" on:click={() => showIOSGuide = false}>✕</button>
-                                </div>
-                                <div class="guide-steps-new">
-                                    <div class="step-item">
-                                        <div class="step-icon">1</div>
-                                        <div class="step-text">Tap <strong>Share</strong> <span class="inline-icon">⬆</span></div>
-                                    </div>
-                                    <div class="step-item">
-                                        <div class="step-icon">2</div>
-                                        <div class="step-text">Tap <strong>"Add to Home Screen"</strong></div>
-                                    </div>
-                                    <div class="step-item">
-                                        <div class="step-icon">3</div>
-                                        <div class="step-text">Tap <strong>"Add"</strong></div>
-                                    </div>
-                                </div>
-                                <div class="guide-done">
-                                    <IconCheck size={16} />
-                                    <span>App will appear on your home screen</span>
-                                </div>
-                            </div>
-                        {/if}
-
-                        <!-- Android APK Download (if available) -->
-                        {#if device.isAndroid && appConfig.apkUrl}
-                            <a href={appConfig.apkUrl} download class="apk-download-btn">
-                                <div class="apk-icon">
-                                    <IconDownload size={24} />
-                                </div>
-                                <div class="apk-info">
-                                    <span class="apk-title">Download APK</span>
-                                    <span class="apk-meta">{appConfig.apkSize || 'Android Package'} • Direct Install</span>
-                                </div>
-                                <IconChevronRight size={20} />
-                            </a>
-                            <p class="apk-note">
-                                <IconShield size={14} />
-                                <span>Signed & verified. Enable "Install from unknown sources" if prompted.</span>
-                            </p>
-                        {/if}
-
-                        <!-- Alternative: Manual Install Guide -->
-                        {#if !showIOSGuide}
-                            <button class="alt-install-btn" on:click={() => showManualGuide = !showManualGuide}>
-                                <IconDeviceMobile size={18} />
-                                <span>Alternative Installation</span>
-                                <span class="chevron" class:chevron-open={showManualGuide}>›</span>
-                            </button>
-                        {/if}
-                        
-                        {#if showManualGuide}
-                            <div class="manual-guide-card">
-                                {#if device.isIOS}
-                                    <p class="manual-intro">Safari → Share → Add to Home Screen</p>
-                                {:else if device.isAndroid}
-                                    <p class="manual-intro">Chrome Menu (⋮) → Add to Home Screen</p>
-                                {:else}
-                                    <p class="manual-intro">Browser Menu → Install App</p>
-                                {/if}
-                            </div>
+                {#if downloadStatus}
+                    <div class="download-status" class:download-success={downloadStatus === 'success'} class:download-error={downloadStatus === 'error'}>
+                        {#if downloadStatus === 'success'}
+                            <IconCheck size={18} />
+                            <span>Download started! Check your downloads folder and tap to install.</span>
+                        {:else if downloadStatus === 'error'}
+                            <IconAlertTriangle size={18} />
+                            <span>{downloadError}</span>
+                        {:else if downloadStatus === 'ios'}
+                            <IconInfoCircle size={18} />
+                            <span>iOS app coming soon! For now, use Safari to access the web app.</span>
                         {/if}
                     </div>
                 {/if}
+
+                <!-- Install Instructions -->
+                <div class="install-instructions">
+                    <h5 class="instructions-title">After Download:</h5>
+                    <div class="instruction-steps">
+                        <div class="instruction-step">
+                            <span class="step-num">1</span>
+                            <span>Open the downloaded APK file</span>
+                        </div>
+                        <div class="instruction-step">
+                            <span class="step-num">2</span>
+                            <span>Tap "Install" when prompted</span>
+                        </div>
+                        <div class="instruction-step">
+                            <span class="step-num">3</span>
+                            <span>Open the app and login</span>
+                        </div>
+                    </div>
+                    <p class="security-note">
+                        <IconShield size={14} />
+                        <span>If prompted, enable "Install from unknown sources" in Settings</span>
+                    </p>
+                </div>
+            </div>
 
                 <!-- QR Code for Desktop -->
                 {#if !device.isMobile && qrCodeUrl}
