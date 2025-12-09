@@ -13,7 +13,7 @@
         IconExternalLink, IconInfoCircle, IconBrandGooglePlay,
         IconBrandApple, IconQrcode
     } from '@tabler/icons-svelte';
-    import { appConfig, detectDevice, generateQRCodeDataUrl } from '$lib/stores/appInstall.js';
+    import { appConfig, detectDevice, generateQRCodeDataUrl, installPWA, setDeferredPrompt, getDeferredPrompt } from '$lib/stores/appInstall.js';
     import { browser } from '$app/environment';
 
     export let user;
@@ -24,10 +24,39 @@
     let loading = {};
     let errors = {};
     let successMsg = '';
+    let installError = '';
+    let isInstalling = false;
+    let canInstall = false;
 
     $: settings = $privacyStore;
 
-    onMount(() => { privacyStore.init(user?.uid); });
+    onMount(() => { 
+        privacyStore.init(user?.uid);
+        
+        // Listen for PWA install prompt
+        if (browser) {
+            const handleBeforeInstall = (e) => {
+                e.preventDefault();
+                setDeferredPrompt(e);
+                canInstall = true;
+            };
+            
+            window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+            
+            // Check if prompt already captured
+            canInstall = !!getDeferredPrompt();
+            
+            // Listen for successful install
+            window.addEventListener('appinstalled', () => {
+                canInstall = false;
+                showSuccess('App installed successfully!');
+            });
+            
+            return () => {
+                window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+            };
+        }
+    });
 
     const sections = [
         { id: 'collection', label: 'Data Collection', icon: IconShield },
@@ -45,6 +74,24 @@
     $: if (browser) {
         device = detectDevice();
         qrCodeUrl = generateQRCodeDataUrl(window.location.origin, 160);
+    }
+
+    // Direct install handler
+    async function handleDirectInstall() {
+        if (isInstalling) return;
+        isInstalling = true;
+        installError = '';
+        
+        const result = await installPWA();
+        
+        if (result.success) {
+            showSuccess('App installed successfully!');
+            canInstall = false;
+        } else {
+            installError = result.error;
+        }
+        
+        isInstalling = false;
     }
 
     const dataCollectionItems = [
@@ -297,11 +344,27 @@
                             <span>App Already Installed</span>
                         </div>
                     {:else}
-                        <!-- PWA Install (Always available) -->
+                        <!-- Direct Install Button (One-Click) -->
+                        {#if canInstall}
+                            <button class="direct-install-btn" on:click={handleDirectInstall} disabled={isInstalling}>
+                                {#if isInstalling}
+                                    <IconLoader2 size={22} class="spinner" />
+                                    <span>Installing...</span>
+                                {:else}
+                                    <IconDownload size={22} stroke={2} />
+                                    <span>Install App Now</span>
+                                {/if}
+                            </button>
+                            {#if installError}
+                                <p class="install-error"><IconAlertTriangle size={14} /> {installError}</p>
+                            {/if}
+                        {/if}
+
+                        <!-- PWA Install Guide (shown when direct install not available) -->
                         <div class="download-option">
                             <div class="option-header">
                                 <IconDeviceMobile size={20} stroke={1.5} />
-                                <span>Add to Home Screen (PWA)</span>
+                                <span>{canInstall ? 'Or Add Manually' : 'Add to Home Screen'}</span>
                             </div>
                             {#if device.isIOS}
                                 <div class="pwa-guide">
@@ -320,7 +383,13 @@
                                     </ol>
                                 </div>
                             {:else}
-                                <p class="pwa-note">Use your browser menu to add this app to your home screen.</p>
+                                <div class="pwa-guide">
+                                    <ol>
+                                        <li>Click the <strong>install icon</strong> in your browser's address bar</li>
+                                        <li>Or open browser menu and click <strong>"Install app"</strong></li>
+                                        <li>Click <strong>"Install"</strong> to confirm</li>
+                                    </ol>
+                                </div>
                             {/if}
                         </div>
 
@@ -552,6 +621,12 @@
     .apk-disclaimer { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--theme-text-secondary, var(--apple-gray-1)); margin: 4px 0 0 0; padding: 0 4px; }
 
     .installed-badge { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 20px; background: rgba(52, 199, 89, 0.1); border: 1px solid rgba(52, 199, 89, 0.3); border-radius: var(--apple-radius-md); color: var(--apple-green); font-size: 16px; font-weight: 600; }
+
+    .direct-install-btn { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; padding: 18px 24px; background: linear-gradient(135deg, var(--apple-accent), #5856D6); color: white; border: none; border-radius: var(--apple-radius-lg); font-size: 17px; font-weight: 600; cursor: pointer; transition: var(--apple-transition); box-shadow: 0 4px 16px rgba(0, 122, 255, 0.3); }
+    .direct-install-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0, 122, 255, 0.4); }
+    .direct-install-btn:active:not(:disabled) { transform: scale(0.98); }
+    .direct-install-btn:disabled { opacity: 0.7; cursor: wait; }
+    .install-error { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--apple-red); margin: 8px 0 0 0; padding: 0 4px; }
 
     .qr-section { padding: 20px; background: var(--theme-border-light, var(--apple-gray-6)); border-radius: var(--apple-radius-md); text-align: center; }
     .qr-header { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 15px; font-weight: 600; color: var(--theme-text, var(--apple-black)); margin-bottom: 16px; }

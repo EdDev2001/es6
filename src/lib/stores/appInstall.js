@@ -164,7 +164,7 @@ export const showInstallPrompt = derived(
 
 // App configuration
 export const appConfig = {
-    name: 'PCC Attendance',
+    name: 'Attendance System',
     icon: '/logo.png',
     description: 'Install the app for faster access and a smoother experience.',
     playStoreUrl: null, // Set your Play Store URL here when published
@@ -173,10 +173,10 @@ export const appConfig = {
     apkSize: null,      // e.g., '12.5 MB'
     // Deep linking configuration
     deepLink: {
-        scheme: 'pccattendance',           // Custom URL scheme (e.g., pccattendance://open)
-        androidPackage: null,               // e.g., 'com.pcc.attendance'
-        iosBundleId: null,                  // e.g., 'com.pcc.attendance'
-        universalLinkDomain: null,          // e.g., 'pccattendance.com'
+        scheme: 'attendancesystem',         // Custom URL scheme (e.g., attendancesystem://open)
+        androidPackage: null,               // e.g., 'com.attendance.system'
+        iosBundleId: null,                  // e.g., 'com.attendance.system'
+        universalLinkDomain: null,          // e.g., 'attendancesystem.com'
     },
     // QR code configuration
     qrCode: {
@@ -186,6 +186,46 @@ export const appConfig = {
         backgroundColor: '#ffffff',
     }
 };
+
+// Store for deferred install prompt (shared across components)
+let deferredInstallPrompt = null;
+
+export function setDeferredPrompt(prompt) {
+    deferredInstallPrompt = prompt;
+}
+
+export function getDeferredPrompt() {
+    return deferredInstallPrompt;
+}
+
+export function clearDeferredPrompt() {
+    deferredInstallPrompt = null;
+}
+
+// Direct PWA install function
+export async function installPWA() {
+    if (!browser) return { success: false, error: 'Not in browser' };
+    
+    const prompt = getDeferredPrompt();
+    if (!prompt) {
+        return { success: false, error: 'Install prompt not available. Use browser menu to add to home screen.' };
+    }
+    
+    try {
+        prompt.prompt();
+        const { outcome } = await prompt.userChoice;
+        clearDeferredPrompt();
+        
+        if (outcome === 'accepted') {
+            appInstallPrefs.markInstalled();
+            return { success: true };
+        } else {
+            return { success: false, error: 'Installation cancelled' };
+        }
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+}
 
 // Generate QR code data URL using a simple QR code algorithm
 export function generateQRCodeDataUrl(text, size = 180) {

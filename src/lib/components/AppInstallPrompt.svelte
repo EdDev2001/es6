@@ -4,18 +4,20 @@
     import { fade, fly } from 'svelte/transition';
     import { cubicOut } from 'svelte/easing';
     import { IconX, IconDownload, IconBrandGooglePlay, IconBrandApple, IconDeviceMobile, IconExternalLink } from '@tabler/icons-svelte';
-    import { appInstallPrefs, detectDevice, showInstallPrompt, appConfig } from '$lib/stores/appInstall.js';
+    import { appInstallPrefs, detectDevice, showInstallPrompt, appConfig, setDeferredPrompt, getDeferredPrompt, clearDeferredPrompt } from '$lib/stores/appInstall.js';
 
     let visible = false;
     let device = { isMobile: false, isIOS: false, isAndroid: false, isPWA: false, isStandalone: false };
-    let deferredPrompt = null;
     let showOptions = false;
     let idleTimer = null;
+
+    // Get deferred prompt from shared store
+    $: deferredPrompt = getDeferredPrompt();
 
     // PWA install prompt event
     function handleBeforeInstallPrompt(e) {
         e.preventDefault();
-        deferredPrompt = e;
+        setDeferredPrompt(e);
     }
 
     onMount(() => {
@@ -66,8 +68,9 @@
 
     // Handle primary install button click
     async function handleInstallClick() {
+        const prompt = getDeferredPrompt();
         // If we have a deferred prompt and no store URLs, install directly
-        if (deferredPrompt && !appConfig.playStoreUrl && !appConfig.apkUrl) {
+        if (prompt && !appConfig.playStoreUrl && !appConfig.apkUrl) {
             await handlePWAInstall();
         } else {
             // Show options
@@ -77,17 +80,18 @@
 
     // Handle native PWA install
     async function handlePWAInstall() {
-        if (deferredPrompt) {
+        const prompt = getDeferredPrompt();
+        if (prompt) {
             try {
-                deferredPrompt.prompt();
-                const { outcome } = await deferredPrompt.userChoice;
+                prompt.prompt();
+                const { outcome } = await prompt.userChoice;
                 if (outcome === 'accepted') {
                     appInstallPrefs.markInstalled();
                 }
             } catch (e) {
                 console.warn('PWA install failed:', e);
             }
-            deferredPrompt = null;
+            clearDeferredPrompt();
         }
         visible = false;
     }
