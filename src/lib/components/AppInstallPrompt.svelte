@@ -64,13 +64,28 @@
         };
     });
 
+    // Handle primary install button click
+    async function handleInstallClick() {
+        // If we have a deferred prompt and no store URLs, install directly
+        if (deferredPrompt && !appConfig.playStoreUrl && !appConfig.apkUrl) {
+            await handlePWAInstall();
+        } else {
+            // Show options
+            showOptions = true;
+        }
+    }
+
     // Handle native PWA install
     async function handlePWAInstall() {
         if (deferredPrompt) {
-            deferredPrompt.prompt();
-            const { outcome } = await deferredPrompt.userChoice;
-            if (outcome === 'accepted') {
-                appInstallPrefs.markInstalled();
+            try {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    appInstallPrefs.markInstalled();
+                }
+            } catch (e) {
+                console.warn('PWA install failed:', e);
             }
             deferredPrompt = null;
         }
@@ -177,7 +192,7 @@
         <div class="actions">
             {#if !showOptions}
                 <!-- Primary Install Button -->
-                <button class="btn-primary" on:click={() => showOptions = true}>
+                <button class="btn-primary" on:click={handleInstallClick}>
                     <IconDownload size={20} stroke={2} />
                     <span>Install App</span>
                     <span class="recommended-badge">Recommended</span>
@@ -192,6 +207,16 @@
                                 <IconDeviceMobile size={20} stroke={1.5} />
                                 <span>Add to Home Screen</span>
                             </button>
+                        {:else}
+                            <!-- Show PWA guide when no deferred prompt -->
+                            <div class="android-pwa-guide">
+                                <p class="guide-title">Add to Home Screen:</p>
+                                <ol class="guide-steps">
+                                    <li>Tap the <strong>⋮ menu</strong> (3 dots) in your browser</li>
+                                    <li>Tap <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong></li>
+                                    <li>Tap <strong>"Add"</strong> to confirm</li>
+                                </ol>
+                            </div>
                         {/if}
                         
                         {#if appConfig.playStoreUrl}
@@ -217,10 +242,6 @@
                             </p>
                         {/if}
 
-                        {#if !deferredPrompt && !appConfig.playStoreUrl && !appConfig.apkUrl}
-                            <p class="no-options">PWA installation available via browser menu.</p>
-                        {/if}
-
                     {:else if device.isIOS}
                         <!-- iOS Options -->
                         {#if appConfig.appStoreUrl}
@@ -238,6 +259,12 @@
                                 <li>Scroll and tap <strong>"Add to Home Screen"</strong></li>
                                 <li>Tap <strong>"Add"</strong> to confirm</li>
                             </ol>
+                        </div>
+                    {:else}
+                        <!-- Fallback for other mobile devices -->
+                        <div class="generic-pwa-guide">
+                            <p class="guide-title">Add to Home Screen:</p>
+                            <p class="guide-text">Use your browser's menu to add this app to your home screen for quick access.</p>
                         </div>
                     {/if}
                 </div>
@@ -465,14 +492,9 @@
         padding: 0 8px;
     }
 
-    .no-options {
-        font-size: 13px;
-        color: var(--theme-text-secondary, #8e8e93);
-        text-align: center;
-        padding: 12px;
-    }
-
-    .ios-pwa-guide {
+    .ios-pwa-guide,
+    .android-pwa-guide,
+    .generic-pwa-guide {
         background: var(--theme-border-light, #f2f2f7);
         border-radius: 12px;
         padding: 16px;
@@ -483,6 +505,13 @@
         font-weight: 600;
         color: var(--theme-text, #000);
         margin: 0 0 12px 0;
+    }
+
+    .guide-text {
+        font-size: 13px;
+        color: var(--theme-text-secondary, #8e8e93);
+        margin: 0;
+        line-height: 1.5;
     }
 
     .guide-steps {
