@@ -318,181 +318,137 @@
         {#if activeSection === 'getapp'}
             <div class="content-header">
                 <h3>Get Mobile App</h3>
-                <p>Download the app for a better experience</p>
+                <p>Download and install for the best experience</p>
             </div>
             
             <div class="app-download-section">
-                <!-- App Info Card -->
-                <div class="download-app-card">
-                    <img src={appConfig.icon} alt="{appConfig.name}" class="download-app-icon" />
-                    <div class="download-app-info">
-                        <h4 class="download-app-name">{appConfig.name}</h4>
-                        <p class="download-app-desc">{appConfig.description}</p>
+                <!-- App Store Style Card -->
+                <div class="app-store-card">
+                    <img src={appConfig.icon} alt="{appConfig.name}" class="app-store-icon" />
+                    <div class="app-store-info">
+                        <h4 class="app-store-name">{appConfig.name}</h4>
+                        <p class="app-store-developer">Enterprise Attendance Solution</p>
+                        <div class="app-store-rating">
+                            <span class="stars">★★★★★</span>
+                            <span class="rating-text">5.0</span>
+                        </div>
                     </div>
-                </div>
-
-                <!-- Benefits -->
-                <div class="download-benefits">
-                    <div class="benefit-item">
-                        <span class="benefit-emoji">⚡</span>
-                        <span>Faster Performance</span>
-                    </div>
-                    <div class="benefit-item">
-                        <span class="benefit-emoji">📴</span>
-                        <span>Offline Access</span>
-                    </div>
-                    <div class="benefit-item">
-                        <span class="benefit-emoji">🔔</span>
-                        <span>Push Notifications</span>
-                    </div>
-                    <div class="benefit-item">
-                        <span class="benefit-emoji">🔒</span>
-                        <span>Enhanced Security</span>
-                    </div>
-                </div>
-
-                <!-- Download Options -->
-                <div class="download-options">
                     {#if device.isStandalone}
-                        <div class="installed-badge">
-                            <IconCheck size={20} />
-                            <span>App Already Installed</span>
+                        <div class="app-installed-chip">
+                            <IconCheck size={14} />
+                            <span>Installed</span>
                         </div>
                     {:else}
-                        <!-- Main Install Button - Always visible on mobile -->
-                        <button class="direct-install-btn" on:click={handleDirectInstall} disabled={isInstalling}>
+                        <button class="app-get-btn" on:click={handleDirectInstall} disabled={isInstalling}>
                             {#if isInstalling}
-                                <IconLoader2 size={22} class="spinner" />
-                                <span>Installing...</span>
+                                <IconLoader2 size={16} class="spinner" />
                             {:else}
-                                <IconDownload size={22} stroke={2} />
-                                <span>Install App Now</span>
+                                GET
                             {/if}
                         </button>
-                        
+                    {/if}
+                </div>
+
+                <!-- App Screenshots/Features Preview -->
+                <div class="app-features-strip">
+                    <div class="feature-chip"><span>📱</span> Native Feel</div>
+                    <div class="feature-chip"><span>⚡</span> Fast</div>
+                    <div class="feature-chip"><span>📴</span> Offline</div>
+                    <div class="feature-chip"><span>🔔</span> Alerts</div>
+                </div>
+
+                {#if !device.isStandalone}
+                    <!-- Download Options -->
+                    <div class="download-options-new">
                         {#if installError}
-                            <p class="install-error"><IconAlertTriangle size={14} /> {installError}</p>
+                            <div class="install-message">
+                                <IconInfoCircle size={18} />
+                                <span>{installError}</span>
+                            </div>
                         {/if}
 
                         {#if showIOSGuide}
-                            <!-- iOS Install Guide Modal -->
-                            <div class="ios-guide-modal">
-                                <div class="ios-guide-header">
-                                    <IconInfoCircle size={20} />
-                                    <span>How to Install on iPhone/iPad</span>
-                                    <button class="close-guide-btn" on:click={() => showIOSGuide = false}>✕</button>
+                            <!-- iOS Install Guide -->
+                            <div class="install-guide-card">
+                                <div class="guide-header">
+                                    <span class="guide-title">📲 Install on iPhone/iPad</span>
+                                    <button class="guide-close" on:click={() => showIOSGuide = false}>✕</button>
                                 </div>
-                                <div class="ios-guide-steps">
-                                    <div class="guide-step">
-                                        <span class="step-number">1</span>
-                                        <span>Tap the <strong>Share</strong> button <span class="share-icon-inline">⬆</span> at the bottom of Safari</span>
+                                <div class="guide-steps-new">
+                                    <div class="step-item">
+                                        <div class="step-icon">1</div>
+                                        <div class="step-text">Tap <strong>Share</strong> <span class="inline-icon">⬆</span></div>
                                     </div>
-                                    <div class="guide-step">
-                                        <span class="step-number">2</span>
-                                        <span>Scroll down and tap <strong>"Add to Home Screen"</strong></span>
+                                    <div class="step-item">
+                                        <div class="step-icon">2</div>
+                                        <div class="step-text">Tap <strong>"Add to Home Screen"</strong></div>
                                     </div>
-                                    <div class="guide-step">
-                                        <span class="step-number">3</span>
-                                        <span>Tap <strong>"Add"</strong> in the top right corner</span>
+                                    <div class="step-item">
+                                        <div class="step-icon">3</div>
+                                        <div class="step-text">Tap <strong>"Add"</strong></div>
                                     </div>
                                 </div>
-                                <p class="ios-guide-note">The app icon will appear on your home screen!</p>
+                                <div class="guide-done">
+                                    <IconCheck size={16} />
+                                    <span>App will appear on your home screen</span>
+                                </div>
                             </div>
                         {/if}
 
-                        <!-- Collapsible Manual Instructions -->
-                        <button class="manual-toggle" on:click={() => showManualGuide = !showManualGuide}>
-                            <IconDeviceMobile size={18} stroke={1.5} />
-                            <span>Manual Installation Guide</span>
-                            <span class="toggle-arrow" class:toggle-open={showManualGuide}>▼</span>
-                        </button>
-                        
-                        {#if showManualGuide}
-                            <div class="download-option collapsed-guide">
-                                {#if device.isIOS}
-                                    <div class="pwa-guide">
-                                        <ol>
-                                            <li>Tap the <strong>Share</strong> button <span class="share-icon">⬆</span></li>
-                                            <li>Scroll and tap <strong>"Add to Home Screen"</strong></li>
-                                            <li>Tap <strong>"Add"</strong> to confirm</li>
-                                        </ol>
-                                    </div>
-                                {:else if device.isAndroid}
-                                    <div class="pwa-guide">
-                                        <ol>
-                                            <li>Tap the <strong>⋮ menu</strong> (3 dots) in browser</li>
-                                            <li>Tap <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong></li>
-                                            <li>Tap <strong>"Add"</strong> to confirm</li>
-                                        </ol>
-                                    </div>
-                                {:else}
-                                    <div class="pwa-guide">
-                                        <ol>
-                                            <li>Click the <strong>install icon</strong> in your browser's address bar</li>
-                                            <li>Or open browser menu and click <strong>"Install app"</strong></li>
-                                            <li>Click <strong>"Install"</strong> to confirm</li>
-                                        </ol>
-                                    </div>
-                                {/if}
-                            </div>
-                        {/if}
-
-                        <!-- Play Store (if configured) -->
-                        {#if appConfig.playStoreUrl}
-                            <a href={appConfig.playStoreUrl} target="_blank" rel="noopener noreferrer" class="store-button play-store">
-                                <IconBrandGooglePlay size={24} stroke={1.5} />
-                                <div class="store-text">
-                                    <span class="store-label">GET IT ON</span>
-                                    <span class="store-name">Google Play</span>
+                        <!-- Android APK Download (if available) -->
+                        {#if device.isAndroid && appConfig.apkUrl}
+                            <a href={appConfig.apkUrl} download class="apk-download-btn">
+                                <div class="apk-icon">
+                                    <IconDownload size={24} />
                                 </div>
-                                <IconExternalLink size={16} stroke={1.5} />
-                            </a>
-                        {/if}
-
-                        <!-- App Store (if configured) -->
-                        {#if appConfig.appStoreUrl}
-                            <a href={appConfig.appStoreUrl} target="_blank" rel="noopener noreferrer" class="store-button app-store">
-                                <IconBrandApple size={24} stroke={1.5} />
-                                <div class="store-text">
-                                    <span class="store-label">Download on the</span>
-                                    <span class="store-name">App Store</span>
+                                <div class="apk-info">
+                                    <span class="apk-title">Download APK</span>
+                                    <span class="apk-meta">{appConfig.apkSize || 'Android Package'} • Direct Install</span>
                                 </div>
-                                <IconExternalLink size={16} stroke={1.5} />
+                                <IconChevronRight size={20} />
                             </a>
-                        {/if}
-
-                        <!-- APK Download (if configured) -->
-                        {#if appConfig.apkUrl}
-                            <a href={appConfig.apkUrl} target="_blank" rel="noopener noreferrer" class="download-button apk-download">
-                                <IconDownload size={20} stroke={1.5} />
-                                <div class="download-text">
-                                    <span class="download-label">Download APK</span>
-                                    {#if appConfig.apkSize}
-                                        <span class="download-size">{appConfig.apkSize}</span>
-                                    {/if}
-                                </div>
-                            </a>
-                            <p class="apk-disclaimer">
-                                <IconInfoCircle size={14} />
-                                <span>This APK is officially signed and safe to install.</span>
+                            <p class="apk-note">
+                                <IconShield size={14} />
+                                <span>Signed & verified. Enable "Install from unknown sources" if prompted.</span>
                             </p>
                         {/if}
 
-                        <!-- QR Code for Desktop -->
-                        {#if !device.isMobile && qrCodeUrl}
-                            <div class="qr-section">
-                                <div class="qr-header">
-                                    <IconQrcode size={20} stroke={1.5} />
-                                    <span>Scan with your phone</span>
-                                </div>
-                                <div class="qr-container">
-                                    <img src={qrCodeUrl} alt="QR Code to download app" class="qr-image" />
-                                </div>
-                                <p class="qr-hint">Point your phone camera at the QR code</p>
+                        <!-- Alternative: Manual Install Guide -->
+                        {#if !showIOSGuide}
+                            <button class="alt-install-btn" on:click={() => showManualGuide = !showManualGuide}>
+                                <IconDeviceMobile size={18} />
+                                <span>Alternative Installation</span>
+                                <span class="chevron" class:chevron-open={showManualGuide}>›</span>
+                            </button>
+                        {/if}
+                        
+                        {#if showManualGuide}
+                            <div class="manual-guide-card">
+                                {#if device.isIOS}
+                                    <p class="manual-intro">Safari → Share → Add to Home Screen</p>
+                                {:else if device.isAndroid}
+                                    <p class="manual-intro">Chrome Menu (⋮) → Add to Home Screen</p>
+                                {:else}
+                                    <p class="manual-intro">Browser Menu → Install App</p>
+                                {/if}
                             </div>
                         {/if}
-                    {/if}
-                </div>
+                    </div>
+                {/if}
+
+                <!-- QR Code for Desktop -->
+                {#if !device.isMobile && qrCodeUrl}
+                    <div class="qr-section">
+                        <div class="qr-header">
+                            <IconQrcode size={20} stroke={1.5} />
+                            <span>Scan with your phone</span>
+                        </div>
+                        <div class="qr-container">
+                            <img src={qrCodeUrl} alt="QR Code to download app" class="qr-image" />
+                        </div>
+                        <p class="qr-hint">Point your phone camera at the QR code</p>
+                    </div>
+                {/if}
             </div>
         {/if}
 
@@ -623,73 +579,62 @@
     .spinner { animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* Get Mobile App Section */
-    .app-download-section { display: flex; flex-direction: column; gap: 20px; }
+    /* Get Mobile App Section - App Store Style */
+    .app-download-section { display: flex; flex-direction: column; gap: 16px; }
     
-    .download-app-card { display: flex; align-items: center; gap: 16px; padding: 20px; background: linear-gradient(135deg, rgba(0, 122, 255, 0.1), rgba(88, 86, 214, 0.1)); border-radius: var(--apple-radius-lg); border: 1px solid rgba(0, 122, 255, 0.2); }
-    .download-app-icon { width: 64px; height: 64px; border-radius: 14px; object-fit: cover; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); flex-shrink: 0; }
-    .download-app-info { flex: 1; }
-    .download-app-name { font-size: 18px; font-weight: 700; color: var(--theme-text, var(--apple-black)); margin: 0 0 4px 0; }
-    .download-app-desc { font-size: 14px; color: var(--theme-text-secondary, var(--apple-gray-1)); margin: 0; line-height: 1.4; }
+    /* App Store Card */
+    .app-store-card { display: flex; align-items: center; gap: 14px; padding: 16px; background: var(--theme-card-bg, white); border-radius: var(--apple-radius-lg); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08); }
+    .app-store-icon { width: 72px; height: 72px; border-radius: 16px; object-fit: cover; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12); flex-shrink: 0; }
+    .app-store-info { flex: 1; min-width: 0; }
+    .app-store-name { font-size: 17px; font-weight: 600; color: var(--theme-text); margin: 0 0 2px 0; }
+    .app-store-developer { font-size: 13px; color: var(--theme-text-secondary); margin: 0 0 6px 0; }
+    .app-store-rating { display: flex; align-items: center; gap: 6px; }
+    .stars { color: #FF9500; font-size: 12px; letter-spacing: -1px; }
+    .rating-text { font-size: 12px; color: var(--theme-text-secondary); font-weight: 500; }
+    .app-get-btn { padding: 8px 20px; background: var(--apple-accent); color: white; border: none; border-radius: 20px; font-size: 15px; font-weight: 600; cursor: pointer; transition: var(--apple-transition); min-width: 72px; }
+    .app-get-btn:hover:not(:disabled) { background: var(--apple-accent-hover); transform: scale(1.05); }
+    .app-get-btn:disabled { opacity: 0.7; }
+    .app-installed-chip { display: flex; align-items: center; gap: 4px; padding: 8px 14px; background: rgba(52, 199, 89, 0.15); color: var(--apple-green); border-radius: 20px; font-size: 13px; font-weight: 600; }
 
-    .download-benefits { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-    .benefit-item { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--theme-border-light, var(--apple-gray-6)); border-radius: var(--apple-radius-md); font-size: 13px; font-weight: 500; color: var(--theme-text, var(--apple-black)); }
-    .benefit-emoji { font-size: 16px; }
+    /* Features Strip */
+    .app-features-strip { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0; }
+    .feature-chip { display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: var(--theme-border-light); border-radius: 20px; font-size: 12px; font-weight: 500; color: var(--theme-text); white-space: nowrap; flex-shrink: 0; }
 
-    .download-options { display: flex; flex-direction: column; gap: 12px; }
-    
-    .download-option { padding: 16px; background: var(--theme-border-light, var(--apple-gray-6)); border-radius: var(--apple-radius-md); }
-    .option-header { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; color: var(--theme-text, var(--apple-black)); margin-bottom: 12px; }
-    
-    .pwa-guide { padding-left: 8px; }
-    .pwa-guide ol { margin: 0; padding-left: 20px; font-size: 13px; color: var(--theme-text-secondary, var(--apple-gray-1)); line-height: 1.8; }
-    .pwa-guide li { margin-bottom: 4px; }
-    .pwa-guide strong { color: var(--theme-text, var(--apple-black)); }
-    .pwa-note { font-size: 13px; color: var(--theme-text-secondary, var(--apple-gray-1)); margin: 0; }
-    .share-icon { display: inline-block; background: var(--apple-accent); color: white; width: 18px; height: 18px; border-radius: 4px; font-size: 11px; line-height: 18px; text-align: center; vertical-align: middle; }
+    /* Download Options New */
+    .download-options-new { display: flex; flex-direction: column; gap: 12px; }
+    .install-message { display: flex; align-items: center; gap: 10px; padding: 14px 16px; background: rgba(0, 122, 255, 0.08); border-radius: var(--apple-radius-md); font-size: 14px; color: var(--apple-accent); }
 
-    .store-button { display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: #000; color: white; border-radius: var(--apple-radius-md); text-decoration: none; transition: var(--apple-transition); }
-    .store-button:hover { transform: scale(1.02); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2); }
-    .store-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-    .store-label { font-size: 10px; font-weight: 400; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; }
-    .store-name { font-size: 16px; font-weight: 600; }
-    .play-store { background: linear-gradient(135deg, #1a1a1a, #333); }
-    .app-store { background: linear-gradient(135deg, #1a1a1a, #333); }
-
-    .download-button { display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: var(--theme-card-bg, var(--apple-white)); border: 1px solid var(--theme-border, var(--apple-gray-4)); border-radius: var(--apple-radius-md); text-decoration: none; color: var(--theme-text, var(--apple-black)); transition: var(--apple-transition); }
-    .download-button:hover { background: var(--theme-border-light, var(--apple-gray-6)); border-color: var(--apple-accent); }
-    .download-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-    .download-label { font-size: 15px; font-weight: 600; }
-    .download-size { font-size: 12px; color: var(--theme-text-secondary, var(--apple-gray-1)); }
-
-    .apk-disclaimer { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--theme-text-secondary, var(--apple-gray-1)); margin: 4px 0 0 0; padding: 0 4px; }
-
-    .installed-badge { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 20px; background: rgba(52, 199, 89, 0.1); border: 1px solid rgba(52, 199, 89, 0.3); border-radius: var(--apple-radius-md); color: var(--apple-green); font-size: 16px; font-weight: 600; }
-
-    .direct-install-btn { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; padding: 18px 24px; background: linear-gradient(135deg, var(--apple-accent), #5856D6); color: white; border: none; border-radius: var(--apple-radius-lg); font-size: 17px; font-weight: 600; cursor: pointer; transition: var(--apple-transition); box-shadow: 0 4px 16px rgba(0, 122, 255, 0.3); }
-    .direct-install-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0, 122, 255, 0.4); }
-    .direct-install-btn:active:not(:disabled) { transform: scale(0.98); }
-    .direct-install-btn:disabled { opacity: 0.7; cursor: wait; }
-    .install-error { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--apple-orange); margin: 8px 0 0 0; padding: 10px 12px; background: rgba(255, 149, 0, 0.1); border-radius: var(--apple-radius-sm); }
-
-    /* iOS Guide Modal */
-    .ios-guide-modal { background: var(--theme-card-bg, white); border: 2px solid var(--apple-accent); border-radius: var(--apple-radius-lg); padding: 20px; margin-top: 12px; animation: slideDown 0.3s ease; }
+    /* Install Guide Card */
+    .install-guide-card { background: var(--theme-card-bg, white); border: 2px solid var(--apple-accent); border-radius: var(--apple-radius-lg); padding: 20px; animation: slideDown 0.3s ease; }
     @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-    .ios-guide-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; color: var(--apple-accent); font-weight: 600; font-size: 15px; }
-    .close-guide-btn { margin-left: auto; background: var(--theme-border-light); border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 14px; color: var(--theme-text-secondary); }
-    .close-guide-btn:hover { background: var(--theme-border); }
-    .ios-guide-steps { display: flex; flex-direction: column; gap: 12px; }
-    .guide-step { display: flex; align-items: flex-start; gap: 12px; font-size: 14px; color: var(--theme-text); line-height: 1.5; }
-    .step-number { width: 24px; height: 24px; background: var(--apple-accent); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
-    .share-icon-inline { display: inline-flex; align-items: center; justify-content: center; background: var(--apple-accent); color: white; width: 22px; height: 22px; border-radius: 5px; font-size: 12px; vertical-align: middle; margin: 0 2px; }
-    .ios-guide-note { margin: 16px 0 0 0; padding: 12px; background: rgba(52, 199, 89, 0.1); border-radius: var(--apple-radius-sm); color: var(--apple-green); font-size: 13px; font-weight: 500; text-align: center; }
+    .guide-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .guide-title { font-size: 16px; font-weight: 600; color: var(--theme-text); }
+    .guide-close { background: var(--theme-border-light); border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 14px; color: var(--theme-text-secondary); }
+    .guide-close:hover { background: var(--theme-border); }
+    .guide-steps-new { display: flex; flex-direction: column; gap: 14px; }
+    .step-item { display: flex; align-items: center; gap: 14px; }
+    .step-icon { width: 28px; height: 28px; background: var(--apple-accent); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0; }
+    .step-text { font-size: 15px; color: var(--theme-text); line-height: 1.4; }
+    .step-text strong { color: var(--apple-accent); }
+    .inline-icon { display: inline-flex; align-items: center; justify-content: center; background: var(--apple-accent); color: white; width: 22px; height: 22px; border-radius: 5px; font-size: 12px; vertical-align: middle; margin: 0 2px; }
+    .guide-done { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 16px; padding: 12px; background: rgba(52, 199, 89, 0.1); border-radius: var(--apple-radius-sm); color: var(--apple-green); font-size: 14px; font-weight: 500; }
 
-    /* Manual Toggle */
-    .manual-toggle { display: flex; align-items: center; gap: 10px; width: 100%; padding: 14px 16px; background: var(--theme-border-light); border: none; border-radius: var(--apple-radius-md); font-size: 14px; font-weight: 500; color: var(--theme-text-secondary); cursor: pointer; transition: var(--apple-transition); margin-top: 8px; }
-    .manual-toggle:hover { background: var(--theme-border); color: var(--theme-text); }
-    .toggle-arrow { margin-left: auto; font-size: 10px; transition: transform 0.2s ease; }
-    .toggle-open { transform: rotate(180deg); }
-    .collapsed-guide { margin-top: 8px; animation: slideDown 0.2s ease; }
+    /* APK Download Button */
+    .apk-download-btn { display: flex; align-items: center; gap: 14px; padding: 16px; background: linear-gradient(135deg, #34C759, #30B350); color: white; border-radius: var(--apple-radius-lg); text-decoration: none; transition: var(--apple-transition); }
+    .apk-download-btn:hover { transform: scale(1.02); box-shadow: 0 6px 20px rgba(52, 199, 89, 0.3); }
+    .apk-icon { width: 44px; height: 44px; background: rgba(255, 255, 255, 0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+    .apk-info { flex: 1; }
+    .apk-title { display: block; font-size: 16px; font-weight: 600; }
+    .apk-meta { display: block; font-size: 12px; opacity: 0.85; margin-top: 2px; }
+    .apk-note { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--theme-text-secondary); margin: 8px 0 0 0; padding: 0 4px; }
+
+    /* Alternative Install Button */
+    .alt-install-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 14px 16px; background: var(--theme-border-light); border: none; border-radius: var(--apple-radius-md); font-size: 14px; font-weight: 500; color: var(--theme-text-secondary); cursor: pointer; transition: var(--apple-transition); }
+    .alt-install-btn:hover { background: var(--theme-border); color: var(--theme-text); }
+    .chevron { margin-left: auto; font-size: 18px; font-weight: 300; transition: transform 0.2s ease; }
+    .chevron-open { transform: rotate(90deg); }
+    .manual-guide-card { padding: 14px 16px; background: var(--theme-border-light); border-radius: var(--apple-radius-md); animation: slideDown 0.2s ease; }
+    .manual-intro { margin: 0; font-size: 14px; color: var(--theme-text); font-weight: 500; text-align: center; }
 
     .qr-section { padding: 20px; background: var(--theme-border-light, var(--apple-gray-6)); border-radius: var(--apple-radius-md); text-align: center; }
     .qr-header { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 15px; font-weight: 600; color: var(--theme-text, var(--apple-black)); margin-bottom: 16px; }
