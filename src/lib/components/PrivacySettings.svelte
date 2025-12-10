@@ -191,10 +191,10 @@
         loading[key] = true; errors[key] = null;
         try {
             if (connected) {
-                privacyStore.disconnectThirdPartyApp(key);
+                await privacyStore.disconnectThirdPartyApp(key, user?.uid);
                 showSuccess(`Disconnected from ${label}`);
             } else {
-                const r = await privacyStore.connectThirdPartyApp(key);
+                const r = await privacyStore.connectThirdPartyApp(key, user?.uid);
                 if (r.success) showSuccess(`Connected to ${label}`);
                 else errors[key] = r.error || 'Failed';
             }

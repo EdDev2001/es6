@@ -1,5 +1,6 @@
 import { writable, get } from 'svelte/store';
 import { browser } from '$app/environment';
+import { openOAuthPopup, listenForOAuthCallback, getStoredTokens, disconnectOAuth } from '$lib/services/oauth';
 
 const defaultPrivacySettings = {
     dataCollection: {
@@ -107,30 +108,76 @@ function createPrivacyStore() {
             });
         },
 
-        connectThirdPartyApp: async (appKey) => {
-            const result = await connectApp(appKey);
-            if (result.success) {
-                update(state => {
-                    let newState = {
-                        ...state,
-                        thirdPartyApps: {
-                            ...state.thirdPartyApps,
-                            [appKey]: {
-                                connected: true,
-                                lastSync: new Date().toISOString(),
-                                ...result.data
+        connectThirdPartyApp: async (appKey, userId) => {
+            if (!browser || !userId) return { success: false, error: 'Not authenticated' };
+            
+            // Map appKey to OAuth provider
+            const providerMap = {
+                googleCalendar: 'google',
+                microsoftTeams: 'microsoft',
+                slack: 'slack',
+                zoom: 'zoom'
+            };
+            
+            const provider = providerMap[appKey];
+            if (!provider) return { success: false, error: 'Unknown app' };
+            
+            try {
+                // Open OAuth popup
+                const popup = openOAuthPopup(provider, userId);
+                if (!popup) {
+                    return { success: false, error: 'Failed to open popup. Check if popups are blocked.' };
+                }
+                
+                // Wait for callback
+                const result = await listenForOAuthCallback(provider);
+                
+                if (result.success) {
+                    update(state => {
+                        let newState = {
+                            ...state,
+                            thirdPartyApps: {
+                                ...state.thirdPartyApps,
+                                [appKey]: {
+                                    connected: true,
+                                    lastSync: new Date().toISOString(),
+                                    email: result.data?.email,
+                                    name: result.data?.name,
+                                    workspace: result.data?.workspace
+                                }
                             }
-                        }
-                    };
-                    newState = addConsent(newState, 'connected', 'Third-party Apps', appKey);
-                    saveToStorage(newState);
-                    return newState;
-                });
+                        };
+                        newState = addConsent(newState, 'connected', 'Third-party Apps', appKey);
+                        saveToStorage(newState);
+                        return newState;
+                    });
+                    return { success: true, data: result.data };
+                } else {
+                    return { success: false, error: result.error };
+                }
+            } catch (error) {
+                console.error('OAuth connection error:', error);
+                return { success: false, error: error.message };
             }
-            return result;
         },
 
-        disconnectThirdPartyApp: (appKey) => {
+        disconnectThirdPartyApp: async (appKey, userId) => {
+            if (!browser) return;
+            
+            const providerMap = {
+                googleCalendar: 'google',
+                microsoftTeams: 'microsoft',
+                slack: 'slack',
+                zoom: 'zoom'
+            };
+            
+            const provider = providerMap[appKey];
+            
+            // Disconnect from server if userId provided
+            if (userId && provider) {
+                await disconnectOAuth(userId, provider);
+            }
+            
             update(state => {
                 let newState = {
                     ...state,
@@ -306,48 +353,36 @@ async function checkAllPermissions() {
     return results;
 }
 
-// Third-party app connection simulation (in real app, use OAuth)
-async function connectApp(appKey) {
-    if (!browser) return { success: false, error: 'Not in browser' };
-
-    // Simulate OAuth flow - in production, redirect to actual OAuth endpoints
-    const appConfigs = {
-        googleCalendar: {
-            name: 'Google Calendar',
-            scopes: ['calendar.readonly', 'calendar.events']
-        },
-        microsoftTeams: {
-            name: 'Microsoft Teams',
-            scopes: ['User.Read', 'Calendars.Read']
-        },
-        slack: {
-            name: 'Slack',
-            scopes: ['users:read', 'chat:write']
-        },
-        zoom: {
-            name: 'Zoom',
-            scopes: ['meeting:read', 'user:read']
-        }
+// Check OAuth connection status from Firebase
+export async function checkOAuthStatus(userId, appKey) {
+    if (!browser || !userId) return null;
+    
+    const providerMap = {
+        googleCalendar: 'google',
+        microsoftTeams: 'microsoft',
+        slack: 'slack',
+        zoom: 'zoom'
     };
-
-    const config = appConfigs[appKey];
-    if (!config) return { success: false, error: 'Unknown app' };
-
-    // In production, this would open OAuth popup
-    // For demo, simulate successful connection
-    return new Promise((resolve) => {
-        // Simulate network delay
-        setTimeout(() => {
-            resolve({
-                success: true,
-                data: {
-                    email: 'user@example.com',
-                    workspace: appKey === 'slack' ? 'My Workspace' : null,
-                    scopes: config.scopes
-                }
-            });
-        }, 1500);
-    });
+    
+    const provider = providerMap[appKey];
+    if (!provider) return null;
+    
+    try {
+        const tokens = await getStoredTokens(userId, provider);
+        if (tokens) {
+            return {
+                connected: true,
+                email: tokens.email,
+                name: tokens.name,
+                workspace: tokens.team_name,
+                lastSync: tokens.connected_at ? new Date(tokens.connected_at).toISOString() : null
+            };
+        }
+        return { connected: false };
+    } catch (error) {
+        console.error('Error checking OAuth status:', error);
+        return { connected: false };
+    }
 }
 
 export const privacyStore = createPrivacyStore();

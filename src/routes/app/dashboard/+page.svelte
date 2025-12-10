@@ -17,6 +17,7 @@
     let userBadges = [];
     let showActivityModal = false;
     let allRecentActivity = [];
+    let todayRecord = null; // Store today's record for reactive hour calculation
 
     function openActivityModal() {
         showActivityModal = true;
@@ -56,6 +57,64 @@
         else greeting = 'Good Evening';
     }
 
+    // Helper function to calculate break minutes for a record
+    function getBreakMinutes(record, isToday = false) {
+        const breakStart = record.breakIn?.timestamp || record.breakStart?.timestamp;
+        const breakEnd = record.breakOut?.timestamp || record.breakEnd?.timestamp;
+        
+        if (!breakStart) return 0;
+        
+        const breakStartTime = new Date(breakStart);
+        
+        // If on break and it's today, break is ongoing - calculate from break start to now
+        if (isToday && record.currentStatus === 'onBreak') {
+            return differenceInMinutes(new Date(), breakStartTime);
+        }
+        
+        // If break ended, calculate the break duration
+        if (breakEnd) {
+            return differenceInMinutes(new Date(breakEnd), breakStartTime);
+        }
+        
+        return 0;
+    }
+
+    // Helper function to calculate work minutes for a record
+    function getWorkMinutes(record, isToday = false) {
+        if (!record.checkIn?.timestamp) return 0;
+        
+        const checkIn = new Date(record.checkIn.timestamp);
+        let endTime;
+        
+        if (record.checkOut?.timestamp) {
+            // Shift completed
+            endTime = new Date(record.checkOut.timestamp);
+        } else if (isToday) {
+            // Still working today
+            if (record.currentStatus === 'onBreak') {
+                // On break - use break start time as end point (pause the timer)
+                const breakStart = record.breakIn?.timestamp || record.breakStart?.timestamp;
+                endTime = breakStart ? new Date(breakStart) : new Date();
+            } else {
+                // Working - use current time
+                endTime = new Date();
+            }
+        } else {
+            // Past day without checkout - use check-in time (0 hours)
+            return 0;
+        }
+        
+        const totalMinutes = differenceInMinutes(endTime, checkIn);
+        const breakMinutes = getBreakMinutes(record, isToday);
+        
+        // Only subtract break time if not currently on break (already handled above)
+        if (record.currentStatus !== 'onBreak') {
+            return Math.max(0, totalMinutes - breakMinutes);
+        }
+        
+        return Math.max(0, totalMinutes);
+    }
+
     async function loadAttendanceStats(uid) {
         try {
             const snapshot = await get(ref(db, `attendance/${uid}`));
@@ -68,14 +127,13 @@
             const monthStart = startOfMonth(new Date());
             const monthEnd = endOfMonth(new Date());
 
-            const todayRecord = records.find(r => r.date === today);
+            todayRecord = records.find(r => r.date === today) || null;
             if (todayRecord) {
                 attendanceStats.todayStatus = todayRecord.currentStatus;
                 attendanceStats.todayCheckIn = todayRecord.checkIn?.timestamp;
+                // Initial calculation - will be updated reactively
                 if (todayRecord.checkIn?.timestamp) {
-                    const checkIn = new Date(todayRecord.checkIn.timestamp);
-                    const checkOut = todayRecord.checkOut?.timestamp ? new Date(todayRecord.checkOut.timestamp) : new Date();
-                    attendanceStats.todayHours = differenceInMinutes(checkOut, checkIn) / 60;
+                    attendanceStats.todayHours = getWorkMinutes(todayRecord, true) / 60;
                 }
             }
 
@@ -83,9 +141,8 @@
             records.forEach(r => {
                 const recordDate = new Date(r.date);
                 if (recordDate >= weekStart && recordDate <= weekEnd && r.checkIn?.timestamp) {
-                    const checkIn = new Date(r.checkIn.timestamp);
-                    const checkOut = r.checkOut?.timestamp ? new Date(r.checkOut.timestamp) : (r.date === today ? new Date() : checkIn);
-                    weekMinutes += differenceInMinutes(checkOut, checkIn);
+                    const isToday = r.date === today;
+                    weekMinutes += getWorkMinutes(r, isToday);
                 }
             });
             attendanceStats.weekHours = Math.round(weekMinutes / 60 * 10) / 10;
@@ -95,9 +152,8 @@
                 const recordDate = new Date(r.date);
                 if (recordDate >= monthStart && recordDate <= monthEnd && r.checkIn?.timestamp) {
                     monthDays++;
-                    const checkIn = new Date(r.checkIn.timestamp);
-                    const checkOut = r.checkOut?.timestamp ? new Date(r.checkOut.timestamp) : (r.date === today ? new Date() : checkIn);
-                    monthMinutes += differenceInMinutes(checkOut, checkIn);
+                    const isToday = r.date === today;
+                    monthMinutes += getWorkMinutes(r, isToday);
                 }
             });
             attendanceStats.monthDays = monthDays;
@@ -126,6 +182,16 @@
     function formatHours(hours) { const h = Math.floor(hours); const m = Math.round((hours - h) * 60); return `${h}h ${m}m`; }
     function getStatusColor(status) { if (status === 'checkedIn') return 'green'; if (status === 'onBreak') return 'yellow'; return 'gray'; }
     function getStatusText(status) { if (status === 'checkedIn') return 'Working'; if (status === 'onBreak') return 'On Break'; if (status === 'checkedOut') return 'Completed'; return 'Not Started'; }
+
+    // Reactively recalculate today's hours when time changes
+    // Only updates when actively working (checkedIn), pauses when on break or checked out
+    $: if (currentTime && todayRecord?.checkIn?.timestamp) {
+        // Only recalculate if actively working (not on break, not checked out)
+        if (todayRecord.currentStatus === 'checkedIn') {
+            attendanceStats.todayHours = getWorkMinutes(todayRecord, true) / 60;
+        }
+        // When on break or checked out, hours stay frozen at last calculated value
+    }
 
     $: progressPercent = Math.min((attendanceStats.todayHours / 8) * 100, 100);
     $: weekProgress = Math.min((attendanceStats.weekHours / 40) * 100, 100);
