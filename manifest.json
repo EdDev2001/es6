@@ -1,0 +1,27 @@
+{
+  "background_color": "#d8d2d2",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "es6-ruddy.vercel",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "es6-ruddy.vercel",
+  "start_url": "/",
+  "theme_color": "#fce2e2",
+  "icons": [
+    {
+      "src": "https://es6-ruddy.vercel.app/logo.png",
+      "type": "image/png",
+      "sizes": "1024x1024",
+      "isSquare": true,
+      "isPng": true,
+      "isWebp": false,
+      "isJpg": false,
+      "width": 1024,
+      "is512x512": false,
+      "is256x256": false,
+      "is192x192": false
+    }
+  ],
+  "description": "Attendance System"
+}
