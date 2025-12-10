@@ -432,8 +432,8 @@
             {/if}
 
             <!-- Day of Week Performance -->
-            <section class="chart-section">
-                <div class="chart-card">
+            <section class="chart-section day-performance-section">
+                <div class="chart-card day-performance-card">
                     <div class="chart-header">
                         <div>
                             <h3 class="chart-title">Day Performance</h3>
@@ -441,17 +441,30 @@
                         </div>
                         <IconClock size={20} stroke={1.5} class="chart-icon" />
                     </div>
-                    <div class="day-stats-grid">
-                        {#each dayOfWeekStats.filter(d => d.totalDays > 0) as day}
-                            <div class="day-stat-card">
-                                <span class="day-name">{day.day}</span>
-                                <span class="day-hours">{day.avgHours}h</span>
-                                <span class="day-count">{day.totalDays} days</span>
-                                {#if day.lateCount > 0}
-                                    <span class="day-late">{day.lateCount} late</span>
-                                {/if}
-                            </div>
-                        {/each}
+                    <div class="day-stats-container">
+                        <div class="day-stats-grid-enhanced">
+                            {#each dayOfWeekStats.filter(d => d.totalDays > 0) as day, i}
+                                {@const maxHours = Math.max(...dayOfWeekStats.map(d => d.avgHours || 0))}
+                                {@const barHeight = maxHours > 0 ? ((day.avgHours || 0) / maxHours) * 100 : 0}
+                                {@const isHighest = day.avgHours === maxHours && maxHours > 0}
+                                <div class="day-stat-card-enhanced" class:highest={isHighest}>
+                                    <div class="day-visual">
+                                        <div class="day-bar-container">
+                                            <div class="day-bar-bg"></div>
+                                            <div class="day-bar-fill" style="height: {barHeight}%"></div>
+                                        </div>
+                                    </div>
+                                    <div class="day-info">
+                                        <span class="day-name-enhanced">{day.day}</span>
+                                        <span class="day-hours-enhanced">{day.avgHours}h</span>
+                                        <span class="day-count-enhanced">{day.totalDays} days</span>
+                                        {#if day.lateCount > 0}
+                                            <span class="day-late-enhanced">{day.lateCount} late</span>
+                                        {/if}
+                                    </div>
+                                </div>
+                            {/each}
+                        </div>
                     </div>
                 </div>
             </section>
@@ -463,11 +476,27 @@
 <style>
     .analytics-page {
         min-height: 100%;
-        padding: clamp(16px, 4vw, 40px);
-        background: linear-gradient(180deg, #f0f2ff 0%, #f5f5f7 50%, #f0fff4 100%);
+        padding: clamp(16px, 4vw, 48px);
+        background: linear-gradient(180deg, #f0f2ff 0%, #f5f5f7 40%, #f0fff4 100%);
+        position: relative;
+    }
+    .analytics-page::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 300px;
+        background: linear-gradient(135deg, rgba(0, 122, 255, 0.03) 0%, rgba(88, 86, 214, 0.02) 100%);
+        pointer-events: none;
     }
 
-    .analytics-content { max-width: 1000px; margin: 0 auto; }
+    .analytics-content { 
+        max-width: 1100px; 
+        margin: 0 auto;
+        position: relative;
+        z-index: 1;
+    }
 
     .loading-container {
         display: flex;
@@ -475,81 +504,142 @@
         align-items: center;
         justify-content: center;
         min-height: 60vh;
+        gap: 16px;
     }
-    .loading-text { margin-top: 16px; font-size: 15px; color: var(--apple-gray-1); }
+    .loading-text { 
+        font-size: clamp(14px, 2.5vw, 16px); 
+        color: var(--apple-gray-1);
+        font-weight: 500;
+    }
+
+    /* Apple-style animation */
+    .apple-animate-in {
+        animation: fadeSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    @keyframes fadeSlideIn {
+        from {
+            opacity: 0;
+            transform: translateY(12px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Apple spinner */
+    .apple-spinner {
+        width: 32px;
+        height: 32px;
+        border: 3px solid var(--apple-gray-5);
+        border-top-color: var(--apple-accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
 
     /* Header */
     .page-header {
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
-        margin-bottom: clamp(20px, 4vw, 32px);
+        margin-bottom: clamp(20px, 4vw, 36px);
         flex-wrap: wrap;
-        gap: 16px;
+        gap: clamp(12px, 2vw, 16px);
     }
+    .header-text { flex: 1; min-width: 200px; }
     .page-title {
-        font-size: clamp(28px, 5vw, 36px);
+        font-size: clamp(24px, 5vw, 40px);
         font-weight: 700;
         color: var(--apple-black);
-        letter-spacing: -0.5px;
-        margin-bottom: 4px;
+        letter-spacing: -0.8px;
+        margin-bottom: 6px;
+        line-height: 1.1;
     }
-    .page-subtitle { font-size: clamp(14px, 2vw, 16px); color: var(--apple-gray-1); }
+    .page-subtitle { 
+        font-size: clamp(13px, 2vw, 16px); 
+        color: var(--apple-gray-1);
+        font-weight: 400;
+    }
 
     .period-selector {
         position: relative;
         display: flex;
         align-items: center;
+        flex-shrink: 0;
     }
     .period-select {
         appearance: none;
         background: var(--apple-white);
         border: 1px solid var(--apple-gray-4);
-        border-radius: var(--apple-radius-md);
-        padding: 10px 36px 10px 14px;
-        font-size: 14px;
+        border-radius: clamp(10px, 1.5vw, 14px);
+        padding: clamp(8px, 1.5vw, 12px) clamp(32px, 5vw, 40px) clamp(8px, 1.5vw, 12px) clamp(12px, 2vw, 16px);
+        font-size: clamp(12px, 2vw, 14px);
         font-weight: 500;
         color: var(--apple-black);
         cursor: pointer;
-        transition: var(--apple-transition);
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+    .period-select:hover {
+        border-color: var(--apple-gray-3);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     }
     .period-select:focus {
         outline: none;
         border-color: var(--apple-accent);
-        box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+        box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
     }
     :global(.select-icon) {
         position: absolute;
-        right: 12px;
+        right: clamp(10px, 1.5vw, 14px);
         pointer-events: none;
         color: var(--apple-gray-2);
     }
 
     /* Summary Section */
-    .summary-section { margin-bottom: 24px; }
+    .summary-section { margin-bottom: clamp(20px, 4vw, 32px); }
     .summary-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: clamp(10px, 2vw, 16px);
     }
 
     .summary-card {
         background: var(--apple-white);
-        border-radius: var(--apple-radius-lg);
-        padding: clamp(14px, 3vw, 20px);
-        box-shadow: var(--apple-shadow-sm);
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        border-radius: clamp(14px, 2.5vw, 20px);
+        padding: clamp(12px, 2.5vw, 20px);
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         display: flex;
         flex-direction: column;
+        border: 1px solid rgba(0, 0, 0, 0.04);
+        position: relative;
+        overflow: hidden;
+    }
+    .summary-card::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, var(--apple-accent), #5856D6);
+        opacity: 0;
+        transition: opacity 0.3s ease;
     }
     .summary-card:hover {
-        transform: translateY(-2px);
-        box-shadow: var(--apple-shadow-md);
+        transform: translateY(-4px);
+        box-shadow: 0 12px 32px rgba(0, 122, 255, 0.12);
     }
+    .summary-card:hover::after { opacity: 1; }
     .summary-card-large {
         grid-column: span 1;
         align-items: center;
         text-align: center;
+        background: linear-gradient(135deg, rgba(0, 122, 255, 0.03), var(--apple-white));
     }
     .summary-card-ring {
         align-items: center;
@@ -652,26 +742,36 @@
     }
 
     /* Chart Section */
-    .chart-section { margin-bottom: 20px; }
+    .chart-section { margin-bottom: clamp(16px, 3vw, 24px); }
     .chart-card {
         background: var(--apple-white);
-        border-radius: var(--apple-radius-xl);
-        padding: clamp(16px, 3vw, 24px);
-        box-shadow: var(--apple-shadow-sm);
+        border-radius: clamp(16px, 3vw, 24px);
+        padding: clamp(14px, 3vw, 28px);
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+        border: 1px solid rgba(0, 0, 0, 0.04);
+        transition: all 0.3s ease;
+    }
+    .chart-card:hover {
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
     }
     .chart-header {
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
-        margin-bottom: 20px;
+        margin-bottom: clamp(14px, 3vw, 20px);
+        flex-wrap: wrap;
+        gap: 12px;
     }
     .chart-title {
-        font-size: 17px;
+        font-size: clamp(15px, 2.5vw, 18px);
         font-weight: 600;
         color: var(--apple-black);
         margin-bottom: 4px;
     }
-    .chart-subtitle { font-size: 13px; color: var(--apple-gray-1); }
+    .chart-subtitle { 
+        font-size: clamp(11px, 2vw, 13px); 
+        color: var(--apple-gray-1); 
+    }
     :global(.chart-icon) { color: var(--apple-gray-3); }
 
     .chart-container { margin-bottom: 16px; }
@@ -753,28 +853,49 @@
     .weekly-bars {
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: clamp(10px, 2vw, 14px);
     }
-    .week-bar-item { display: flex; flex-direction: column; gap: 6px; }
+    .week-bar-item { 
+        display: flex; 
+        flex-direction: column; 
+        gap: clamp(4px, 1vw, 6px);
+        padding: clamp(8px, 1.5vw, 12px);
+        background: var(--apple-gray-6);
+        border-radius: clamp(8px, 1.5vw, 12px);
+        transition: background 0.2s ease;
+    }
+    .week-bar-item:hover {
+        background: rgba(0, 122, 255, 0.04);
+    }
     .week-bar-track {
-        height: 8px;
+        height: clamp(6px, 1.5vw, 10px);
         background: var(--apple-gray-5);
-        border-radius: 4px;
+        border-radius: clamp(3px, 0.8vw, 5px);
         overflow: hidden;
     }
     .week-bar-fill {
         height: 100%;
         background: linear-gradient(90deg, var(--apple-accent), #5856D6);
-        border-radius: 4px;
+        border-radius: clamp(3px, 0.8vw, 5px);
         transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .week-bar-info {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        flex-wrap: wrap;
+        gap: 4px;
     }
-    .week-label { font-size: 12px; color: var(--apple-gray-1); }
-    .week-hours { font-size: 13px; font-weight: 600; color: var(--apple-black); }
+    .week-label { 
+        font-size: clamp(11px, 2vw, 13px); 
+        color: var(--apple-gray-1);
+        font-weight: 500;
+    }
+    .week-hours { 
+        font-size: clamp(12px, 2.2vw, 14px); 
+        font-weight: 700; 
+        color: var(--apple-black); 
+    }
 
     /* Modal Styles */
     .modal-overlay {
@@ -1075,51 +1196,140 @@
         .stat-pill-label { margin-bottom: 0; }
     }
 
-    /* Day Stats Grid */
-    .day-stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-        gap: 10px;
+    /* Day Performance Enhanced */
+    .day-performance-section { margin-bottom: 32px; }
+    .day-performance-card {
+        background: linear-gradient(135deg, rgba(240, 255, 244, 0.8), var(--apple-white));
+        border: 1px solid rgba(52, 199, 89, 0.1);
     }
-    .day-stat-card {
+    .day-stats-container {
+        padding: clamp(8px, 2vw, 16px) 0;
+    }
+    .day-stats-grid-enhanced {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+        gap: clamp(8px, 2vw, 16px);
+    }
+    .day-stat-card-enhanced {
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding: 14px 10px;
-        background: var(--apple-gray-6);
-        border-radius: var(--apple-radius-md);
+        padding: clamp(12px, 2.5vw, 20px) clamp(8px, 2vw, 16px);
+        background: var(--apple-white);
+        border-radius: clamp(12px, 2vw, 16px);
         text-align: center;
-        transition: var(--apple-transition);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        border: 1px solid var(--apple-gray-5);
+        position: relative;
+        overflow: hidden;
     }
-    .day-stat-card:hover {
-        background: rgba(0, 122, 255, 0.08);
+    .day-stat-card-enhanced::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, var(--apple-accent), #5856D6);
+        opacity: 0;
+        transition: opacity 0.3s ease;
     }
-    .day-name {
-        font-size: 12px;
-        font-weight: 600;
-        color: var(--apple-gray-1);
-        margin-bottom: 6px;
+    .day-stat-card-enhanced:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 24px rgba(0, 122, 255, 0.12);
+        border-color: rgba(0, 122, 255, 0.2);
     }
-    .day-hours {
-        font-size: 20px;
-        font-weight: 700;
-        color: var(--apple-black);
-        line-height: 1;
+    .day-stat-card-enhanced:hover::before { opacity: 1; }
+    .day-stat-card-enhanced.highest {
+        background: linear-gradient(135deg, rgba(0, 122, 255, 0.04), rgba(88, 86, 214, 0.04));
+        border-color: rgba(0, 122, 255, 0.15);
     }
-    .day-count {
-        font-size: 10px;
-        color: var(--apple-gray-2);
-        margin-top: 4px;
+    .day-stat-card-enhanced.highest::before { opacity: 1; }
+
+    .day-visual {
+        width: 100%;
+        margin-bottom: clamp(8px, 1.5vw, 12px);
     }
-    .day-late {
-        font-size: 10px;
-        color: var(--apple-orange);
-        font-weight: 500;
-        margin-top: 4px;
+    .day-bar-container {
+        position: relative;
+        width: 100%;
+        height: clamp(40px, 8vw, 60px);
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+    }
+    .day-bar-bg {
+        position: absolute;
+        bottom: 0;
+        width: clamp(24px, 5vw, 36px);
+        height: 100%;
+        background: var(--apple-gray-5);
+        border-radius: clamp(4px, 1vw, 6px);
+    }
+    .day-bar-fill {
+        position: absolute;
+        bottom: 0;
+        width: clamp(24px, 5vw, 36px);
+        background: linear-gradient(180deg, var(--apple-accent), #5856D6);
+        border-radius: clamp(4px, 1vw, 6px);
+        transition: height 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        min-height: 4px;
     }
 
-    /* Responsive */
-    @media (max-width: 480px) {
+    .day-info {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+    }
+    .day-name-enhanced {
+        font-size: clamp(11px, 2vw, 13px);
+        font-weight: 600;
+        color: var(--apple-gray-1);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .day-hours-enhanced {
+        font-size: clamp(18px, 4vw, 26px);
+        font-weight: 700;
+        color: var(--apple-black);
+        line-height: 1.1;
+        letter-spacing: -0.5px;
+    }
+    .day-count-enhanced {
+        font-size: clamp(9px, 1.8vw, 11px);
+        color: var(--apple-gray-2);
+        margin-top: 2px;
+    }
+    .day-late-enhanced {
+        font-size: clamp(9px, 1.8vw, 11px);
+        color: var(--apple-orange);
+        font-weight: 600;
+        margin-top: 4px;
+        padding: 2px 8px;
+        background: rgba(255, 149, 0, 0.1);
+        border-radius: 10px;
+    }
+
+    /* Responsive - Mobile First */
+    @media (max-width: 359px) {
+        .analytics-page { padding: 12px; }
+        .summary-grid { 
+            grid-template-columns: 1fr; 
+            gap: 8px;
+        }
+        .summary-card-large { grid-column: span 1; }
+        .ring-container-small { transform: scale(0.7); }
+        .day-stats-grid-enhanced { 
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+        }
+        .day-bar-container { height: 35px; }
+        .page-header { flex-direction: column; align-items: flex-start; }
+    }
+
+    @media (min-width: 360px) and (max-width: 480px) {
         .summary-grid { 
             grid-template-columns: repeat(2, 1fr); 
             gap: 10px;
@@ -1127,6 +1337,12 @@
         .summary-card-large { grid-column: span 2; }
         .ring-container-small { transform: scale(0.75); }
         .card-header { margin-bottom: 6px; }
+        .day-stats-grid-enhanced { 
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+        .day-stat-card-enhanced { padding: 10px 6px; }
+        .day-bar-container { height: 40px; }
     }
 
     @media (min-width: 481px) and (max-width: 639px) {
@@ -1135,20 +1351,73 @@
             gap: 12px;
         }
         .summary-card-large { grid-column: span 2; }
+        .day-stats-grid-enhanced { 
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+        }
     }
 
     @media (min-width: 640px) and (max-width: 767px) {
         .summary-grid { grid-template-columns: repeat(3, 1fr); }
         .summary-card-large { grid-column: span 1; }
+        .day-stats-grid-enhanced { 
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+        }
     }
 
-    @media (min-width: 768px) {
+    @media (min-width: 768px) and (max-width: 1023px) {
         .summary-grid { grid-template-columns: repeat(5, 1fr); }
         .summary-card-large { grid-column: span 1; }
         .ring-container-small { transform: scale(0.9); }
+        .day-stats-grid-enhanced { 
+            grid-template-columns: repeat(5, 1fr);
+            gap: 14px;
+        }
+        .day-stat-card-enhanced { padding: 16px 12px; }
     }
 
     @media (min-width: 1024px) {
         .ring-container-small { transform: scale(1); }
+        .day-stats-grid-enhanced { 
+            grid-template-columns: repeat(7, 1fr);
+            gap: 16px;
+        }
+        .day-stat-card-enhanced { padding: 20px 16px; }
+        .day-bar-container { height: 60px; }
+    }
+
+    @media (min-width: 1280px) {
+        .analytics-page { padding: 48px; }
+        .analytics-content { max-width: 1200px; }
+        .day-stats-grid-enhanced { gap: 20px; }
+    }
+
+    /* Touch device optimizations */
+    @media (hover: none) and (pointer: coarse) {
+        .day-stat-card-enhanced:hover {
+            transform: none;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        }
+        .day-stat-card-enhanced:active {
+            transform: scale(0.98);
+            background: rgba(0, 122, 255, 0.06);
+        }
+    }
+
+    /* Landscape mobile */
+    @media (max-height: 500px) and (orientation: landscape) {
+        .analytics-page { padding: 16px 24px; }
+        .page-header { margin-bottom: 16px; }
+        .summary-section { margin-bottom: 16px; }
+        .chart-section { margin-bottom: 16px; }
+        .day-bar-container { height: 40px; }
+    }
+
+    /* High DPI / Retina displays */
+    @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+        .day-stat-card-enhanced {
+            border-width: 0.5px;
+        }
     }
 </style>

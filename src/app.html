@@ -4,13 +4,25 @@
 		<meta charset="utf-8" />
 		<link rel="icon" href="%sveltekit.assets%/logo.png" />
 		<link rel="apple-touch-icon" href="%sveltekit.assets%/logo.png" />
+		<link rel="apple-touch-icon" sizes="152x152" href="%sveltekit.assets%/logo.png" />
+		<link rel="apple-touch-icon" sizes="180x180" href="%sveltekit.assets%/logo.png" />
+		<link rel="apple-touch-icon" sizes="167x167" href="%sveltekit.assets%/logo.png" />
 		<link rel="manifest" href="%sveltekit.assets%/manifest.json" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<meta name="theme-color" content="#007AFF" />
+		<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1C1C1E" />
+		<!-- iOS PWA -->
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 		<meta name="apple-mobile-web-app-title" content="Attendance System" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<!-- Windows/Edge -->
+		<meta name="msapplication-TileColor" content="#007AFF" />
+		<meta name="msapplication-tap-highlight" content="no" />
+		<!-- General -->
 		<meta name="description" content="Enterprise Attendance Management System" />
+		<meta name="application-name" content="Attendance System" />
+		<meta name="format-detection" content="telephone=no" />
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

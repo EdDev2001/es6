@@ -110,13 +110,41 @@ export const appInstallPrefs = createAppInstallStore();
 
 // Device detection utilities
 export function detectDevice() {
-    if (!browser) return { isMobile: false, isIOS: false, isAndroid: false, isPWA: false, isStandalone: false };
+    if (!browser) return { 
+        isMobile: false, 
+        isIOS: false, 
+        isAndroid: false, 
+        isPWA: false, 
+        isStandalone: false,
+        isDesktop: false,
+        isWindows: false,
+        isMac: false,
+        isLinux: false,
+        isChromeOS: false,
+        browser: 'unknown'
+    };
 
     const ua = navigator.userAgent || navigator.vendor || window.opera;
     
+    // Mobile detection
     const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
     const isAndroid = /android/i.test(ua);
     const isMobile = isIOS || isAndroid || /webOS|BlackBerry|Opera Mini|IEMobile/i.test(ua);
+    
+    // Desktop OS detection
+    const isWindows = /Windows NT/i.test(ua);
+    const isMac = /Macintosh|Mac OS X/i.test(ua) && !isIOS;
+    const isLinux = /Linux/i.test(ua) && !isAndroid;
+    const isChromeOS = /CrOS/i.test(ua);
+    const isDesktop = !isMobile && (isWindows || isMac || isLinux || isChromeOS);
+    
+    // Browser detection
+    let browserName = 'unknown';
+    if (/Edg/i.test(ua)) browserName = 'edge';
+    else if (/Chrome/i.test(ua) && !/Chromium/i.test(ua)) browserName = 'chrome';
+    else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) browserName = 'safari';
+    else if (/Firefox/i.test(ua)) browserName = 'firefox';
+    else if (/Opera|OPR/i.test(ua)) browserName = 'opera';
     
     // Check if running as PWA (standalone mode)
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches 
@@ -126,7 +154,19 @@ export function detectDevice() {
     // Check if PWA is installable
     const isPWA = 'serviceWorker' in navigator;
 
-    return { isMobile, isIOS, isAndroid, isPWA, isStandalone };
+    return { 
+        isMobile, 
+        isIOS, 
+        isAndroid, 
+        isPWA, 
+        isStandalone,
+        isDesktop,
+        isWindows,
+        isMac,
+        isLinux,
+        isChromeOS,
+        browser: browserName
+    };
 }
 
 // Check if prompt should be shown
@@ -135,8 +175,8 @@ export function shouldShowPrompt(prefs) {
     
     const device = detectDevice();
     
-    // Don't show if not mobile
-    if (!device.isMobile) return false;
+    // Show for both mobile AND desktop (PWA support)
+    if (!device.isMobile && !device.isDesktop) return false;
     
     // Don't show if already installed/standalone
     if (device.isStandalone || prefs.isInstalled) return false;

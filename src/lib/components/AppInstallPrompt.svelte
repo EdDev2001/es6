@@ -3,11 +3,22 @@
     import { browser } from '$app/environment';
     import { fade, fly } from 'svelte/transition';
     import { cubicOut } from 'svelte/easing';
-    import { IconX, IconDownload, IconBrandGooglePlay, IconBrandApple, IconDeviceMobile, IconExternalLink } from '@tabler/icons-svelte';
+    import { IconX, IconDownload, IconBrandGooglePlay, IconBrandApple, IconDeviceMobile, IconExternalLink, IconDeviceDesktop, IconBrandWindows, IconBrandChrome, IconBrandEdge, IconBrandFirefox, IconBrandSafari } from '@tabler/icons-svelte';
     import { appInstallPrefs, detectDevice, showInstallPrompt, appConfig, setDeferredPrompt, getDeferredPrompt, clearDeferredPrompt } from '$lib/stores/appInstall.js';
 
     let visible = false;
-    let device = { isMobile: false, isIOS: false, isAndroid: false, isPWA: false, isStandalone: false };
+    let device = { 
+        isMobile: false, 
+        isIOS: false, 
+        isAndroid: false, 
+        isPWA: false, 
+        isStandalone: false,
+        isDesktop: false,
+        isWindows: false,
+        isMac: false,
+        isLinux: false,
+        browser: 'unknown'
+    };
     let showOptions = false;
     let idleTimer = null;
 
@@ -204,8 +215,80 @@
             {:else}
                 <!-- Install Options -->
                 <div class="install-options" transition:fade={{ duration: 150 }}>
-                    {#if device.isAndroid}
+                    {#if device.isDesktop}
+                        <!-- Desktop Options -->
+                        <div class="platform-badge desktop">
+                            <IconDeviceDesktop size={16} stroke={1.5} />
+                            <span>{device.isWindows ? 'Windows' : device.isMac ? 'macOS' : device.isLinux ? 'Linux' : 'Desktop'}</span>
+                        </div>
+
+                        {#if deferredPrompt}
+                            <button class="btn-option btn-pwa" on:click={handlePWAInstall}>
+                                <IconDeviceDesktop size={20} stroke={1.5} />
+                                <span>Install Desktop App</span>
+                            </button>
+                        {:else}
+                            <!-- Desktop PWA Guide based on browser -->
+                            <div class="desktop-pwa-guide">
+                                <p class="guide-title">Install as Desktop App:</p>
+                                {#if device.browser === 'chrome'}
+                                    <div class="browser-guide">
+                                        <IconBrandChrome size={18} stroke={1.5} class="browser-icon" />
+                                        <ol class="guide-steps">
+                                            <li>Click the <strong>⋮ menu</strong> (3 dots) in the top right</li>
+                                            <li>Click <strong>"Install Attendance System..."</strong></li>
+                                            <li>Click <strong>"Install"</strong> to confirm</li>
+                                        </ol>
+                                    </div>
+                                {:else if device.browser === 'edge'}
+                                    <div class="browser-guide">
+                                        <IconBrandEdge size={18} stroke={1.5} class="browser-icon" />
+                                        <ol class="guide-steps">
+                                            <li>Click the <strong>⋯ menu</strong> (3 dots) in the top right</li>
+                                            <li>Click <strong>"Apps"</strong> → <strong>"Install this site as an app"</strong></li>
+                                            <li>Click <strong>"Install"</strong> to confirm</li>
+                                        </ol>
+                                    </div>
+                                {:else if device.browser === 'safari' && device.isMac}
+                                    <div class="browser-guide">
+                                        <IconBrandSafari size={18} stroke={1.5} class="browser-icon" />
+                                        <ol class="guide-steps">
+                                            <li>Click <strong>File</strong> in the menu bar</li>
+                                            <li>Click <strong>"Add to Dock"</strong></li>
+                                            <li>Click <strong>"Add"</strong> to confirm</li>
+                                        </ol>
+                                    </div>
+                                {:else if device.browser === 'firefox'}
+                                    <div class="browser-guide">
+                                        <IconBrandFirefox size={18} stroke={1.5} class="browser-icon" />
+                                        <p class="guide-text">Firefox doesn't support PWA installation natively. We recommend using <strong>Chrome</strong> or <strong>Edge</strong> for the best desktop app experience.</p>
+                                    </div>
+                                {:else}
+                                    <ol class="guide-steps">
+                                        <li>Look for an <strong>install icon</strong> in your browser's address bar</li>
+                                        <li>Or use your browser's menu to <strong>"Install"</strong> or <strong>"Add to Desktop"</strong></li>
+                                    </ol>
+                                {/if}
+                            </div>
+                        {/if}
+
+                        <div class="desktop-benefits">
+                            <p class="benefits-title">Desktop app benefits:</p>
+                            <ul class="benefits-list">
+                                <li>✓ Opens in its own window</li>
+                                <li>✓ Quick access from taskbar/dock</li>
+                                <li>✓ Works offline</li>
+                                <li>✓ Native notifications</li>
+                            </ul>
+                        </div>
+
+                    {:else if device.isAndroid}
                         <!-- Android Options -->
+                        <div class="platform-badge android">
+                            <IconDeviceMobile size={16} stroke={1.5} />
+                            <span>Android</span>
+                        </div>
+
                         {#if deferredPrompt}
                             <button class="btn-option btn-pwa" on:click={handlePWAInstall}>
                                 <IconDeviceMobile size={20} stroke={1.5} />
@@ -248,6 +331,11 @@
 
                     {:else if device.isIOS}
                         <!-- iOS Options -->
+                        <div class="platform-badge ios">
+                            <IconBrandApple size={16} stroke={1.5} />
+                            <span>iOS</span>
+                        </div>
+
                         {#if appConfig.appStoreUrl}
                             <button class="btn-option btn-store" on:click={handleAppStore}>
                                 <IconBrandApple size={20} stroke={1.5} />
@@ -264,11 +352,15 @@
                                 <li>Tap <strong>"Add"</strong> to confirm</li>
                             </ol>
                         </div>
+
+                        <p class="ios-note">
+                            The app will appear on your home screen and work like a native app.
+                        </p>
                     {:else}
-                        <!-- Fallback for other mobile devices -->
+                        <!-- Fallback for other devices -->
                         <div class="generic-pwa-guide">
-                            <p class="guide-title">Add to Home Screen:</p>
-                            <p class="guide-text">Use your browser's menu to add this app to your home screen for quick access.</p>
+                            <p class="guide-title">Install App:</p>
+                            <p class="guide-text">Use your browser's menu to add this app to your home screen or desktop for quick access.</p>
                         </div>
                     {/if}
                 </div>
@@ -310,6 +402,22 @@
         z-index: 9999;
         max-height: 85vh;
         overflow-y: auto;
+    }
+
+    /* Desktop centered modal style */
+    @media (min-width: 768px) {
+        .prompt-container {
+            bottom: auto;
+            top: 50%;
+            left: 50%;
+            right: auto;
+            transform: translate(-50%, -50%);
+            border-radius: 20px;
+            max-width: 440px;
+            width: 90%;
+            padding: 28px;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.2);
+        }
     }
 
     .close-btn {
@@ -496,9 +604,34 @@
         padding: 0 8px;
     }
 
+    /* Platform Badge */
+    .platform-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 12px;
+    }
+    .platform-badge.desktop {
+        background: linear-gradient(135deg, rgba(0, 122, 255, 0.1), rgba(88, 86, 214, 0.1));
+        color: var(--apple-accent, #007aff);
+    }
+    .platform-badge.android {
+        background: rgba(52, 199, 89, 0.1);
+        color: #34C759;
+    }
+    .platform-badge.ios {
+        background: rgba(0, 0, 0, 0.06);
+        color: var(--theme-text, #000);
+    }
+
     .ios-pwa-guide,
     .android-pwa-guide,
-    .generic-pwa-guide {
+    .generic-pwa-guide,
+    .desktop-pwa-guide {
         background: var(--theme-border-light, #f2f2f7);
         border-radius: 12px;
         padding: 16px;
@@ -545,6 +678,50 @@
         line-height: 18px;
         text-align: center;
         vertical-align: middle;
+    }
+
+    .ios-note {
+        font-size: 12px;
+        color: var(--theme-text-secondary, #8e8e93);
+        text-align: center;
+        margin: 8px 0 0 0;
+        font-style: italic;
+    }
+
+    /* Desktop specific styles */
+    .browser-guide {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    :global(.browser-icon) {
+        color: var(--apple-accent, #007aff);
+    }
+
+    .desktop-benefits {
+        margin-top: 16px;
+        padding: 14px;
+        background: linear-gradient(135deg, rgba(52, 199, 89, 0.06), rgba(0, 122, 255, 0.06));
+        border-radius: 12px;
+        border: 1px solid rgba(52, 199, 89, 0.1);
+    }
+    .benefits-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--theme-text, #000);
+        margin: 0 0 8px 0;
+    }
+    .benefits-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+    }
+    .benefits-list li {
+        font-size: 12px;
+        color: var(--theme-text-secondary, #8e8e93);
     }
 
     .secondary-actions {
