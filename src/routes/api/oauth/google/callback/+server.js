@@ -1,6 +1,8 @@
 // Google OAuth Callback Handler
 import { json, redirect } from '@sveltejs/kit';
-import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } from '$env/static/private';
+import { env } from '$env/dynamic/private';
+const GOOGLE_CLIENT_ID = env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = env.GOOGLE_CLIENT_SECRET;
 import { getDatabase, ref, set } from 'firebase/database';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getDatabase as getAdminDatabase } from 'firebase-admin/database';

@@ -1,6 +1,8 @@
 // Slack OAuth Callback Handler
 import { json } from '@sveltejs/kit';
-import { SLACK_CLIENT_ID, SLACK_CLIENT_SECRET } from '$env/static/private';
+import { env } from '$env/dynamic/private';
+const SLACK_CLIENT_ID = env.SLACK_CLIENT_ID;
+const SLACK_CLIENT_SECRET = env.SLACK_CLIENT_SECRET;
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 

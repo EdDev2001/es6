@@ -1,6 +1,8 @@
 // Zoom OAuth Token Refresh
 import { json } from '@sveltejs/kit';
-import { ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET } from '$env/static/private';
+import { env } from '$env/dynamic/private';
+const ZOOM_CLIENT_ID = env.ZOOM_CLIENT_ID;
+const ZOOM_CLIENT_SECRET = env.ZOOM_CLIENT_SECRET;
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 

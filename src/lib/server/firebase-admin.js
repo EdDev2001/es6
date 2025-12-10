@@ -8,15 +8,15 @@ let FIREBASE_SERVICE_ACCOUNT = '';
 let PUBLIC_FIREBASE_DATABASE_URL = '';
 
 try {
-    const privateEnv = await import('$env/static/private');
-    FIREBASE_SERVICE_ACCOUNT = privateEnv.FIREBASE_SERVICE_ACCOUNT || '';
+    const { env } = await import('$env/dynamic/private');
+    FIREBASE_SERVICE_ACCOUNT = env.FIREBASE_SERVICE_ACCOUNT || '';
 } catch (e) {
     console.warn('FIREBASE_SERVICE_ACCOUNT not available');
 }
 
 try {
-    const publicEnv = await import('$env/static/public');
-    PUBLIC_FIREBASE_DATABASE_URL = publicEnv.PUBLIC_FIREBASE_DATABASE_URL || '';
+    const { env } = await import('$env/dynamic/public');
+    PUBLIC_FIREBASE_DATABASE_URL = env.PUBLIC_FIREBASE_DATABASE_URL || '';
 } catch (e) {
     console.warn('PUBLIC_FIREBASE_DATABASE_URL not available');
 }

@@ -11,12 +11,12 @@ let EMAIL_PASS = '';
 let EMAIL_FROM = '';
 
 try {
-    const privateEnv = await import('$env/static/private');
-    EMAIL_HOST = privateEnv.EMAIL_HOST || 'smtp.gmail.com';
-    EMAIL_PORT = privateEnv.EMAIL_PORT || '587';
-    EMAIL_USER = privateEnv.EMAIL_USER || '';
-    EMAIL_PASS = privateEnv.EMAIL_PASS || '';
-    EMAIL_FROM = privateEnv.EMAIL_FROM || EMAIL_USER;
+    const { env } = await import('$env/dynamic/private');
+    EMAIL_HOST = env.EMAIL_HOST || 'smtp.gmail.com';
+    EMAIL_PORT = env.EMAIL_PORT || '587';
+    EMAIL_USER = env.EMAIL_USER || '';
+    EMAIL_PASS = env.EMAIL_PASS || '';
+    EMAIL_FROM = env.EMAIL_FROM || EMAIL_USER;
 } catch (e) {
     console.warn('Email environment variables not available');
 }
