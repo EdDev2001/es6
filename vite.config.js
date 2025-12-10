@@ -3,8 +3,10 @@ import basicSsl from '@vitejs/plugin-basic-ssl';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export default defineConfig({
-	plugins: [tailwindcss(), sveltekit(), basicSsl()],
+	plugins: [tailwindcss(), sveltekit(), ...(isDev ? [basicSsl()] : [])],
 	server: {
         https: true,
         host: '0.0.0.0',
