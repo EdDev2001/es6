@@ -7,6 +7,7 @@
     import { getGamificationData, getBadgeById } from '$lib/stores/gamification.js';
     import { activeHoliday, seasonalPrefs } from '$lib/stores/seasonalTheme.js';
     import { ChristmasDailyReward } from '$lib/components/seasonal';
+    import { subscribeToTodayAttendance } from '$lib/realtime/liveSyncEngine.js';
 
     let userProfile = null;
     let isLoading = true;
@@ -18,6 +19,7 @@
     let showActivityModal = false;
     let allRecentActivity = [];
     let todayRecord = null; // Store today's record for reactive hour calculation
+    let unsubscribers = [];
 
     function openActivityModal() {
         showActivityModal = true;
@@ -39,6 +41,21 @@
         if (user) { 
             userProfile = await getUserProfile(user.uid); 
             await loadAttendanceStats(user.uid);
+            // Subscribe to real-time updates for today's attendance
+            const todayUnsub = subscribeToTodayAttendance(user.uid, (todayData) => {
+                if (todayData) {
+                    todayRecord = { ...todayRecord, ...todayData, currentStatus: todayData.currentStatus };
+                    attendanceStats.todayStatus = todayData.currentStatus;
+                    if (todayData.checkIn?.timestamp) {
+                        attendanceStats.todayCheckIn = todayData.checkIn.timestamp;
+                    }
+                    // Recalculate hours when status changes
+                    if (todayRecord?.checkIn?.timestamp) {
+                        attendanceStats.todayHours = getWorkMinutes(todayRecord, true) / 60;
+                    }
+                }
+            });
+            unsubscribers.push(todayUnsub);
             // Load user badges
             const gamifData = await getGamificationData(user.uid);
             if (gamifData?.badges?.length > 0) {
@@ -47,7 +64,10 @@
         }
         isLoading = false;
         updateGreeting();
-        return () => clearInterval(timeInterval);
+        return () => {
+            clearInterval(timeInterval);
+            unsubscribers.forEach(unsub => unsub());
+        };
     });
 
     function updateGreeting() {

@@ -114,6 +114,19 @@
                 status = todayData.currentStatus;
                 if (todayData.checkIn?.timestamp) checkInTime = new Date(todayData.checkIn.timestamp);
                 if (todayData.checkIn?.capturedImage) capturedImage = todayData.checkIn.capturedImage;
+                // Update break times from real-time data
+                if (todayData.breakIn?.timestamp) {
+                    const newBreakStart = new Date(todayData.breakIn.timestamp);
+                    if (todayData.breakOut?.timestamp) {
+                        // Break completed
+                        const breakEndTime = new Date(todayData.breakOut.timestamp);
+                        accumulatedBreakTime = breakEndTime.getTime() - newBreakStart.getTime();
+                        breakStartTime = null;
+                    } else if (todayData.currentStatus === 'onBreak') {
+                        // Currently on break
+                        breakStartTime = newBreakStart;
+                    }
+                }
             }
         });
         unsubscribers.push(todayUnsub);
@@ -192,13 +205,23 @@
                 let lastShift = null;
                 snapshot.forEach(childSnapshot => {
                     const shift = childSnapshot.val();
-                    if (shift.currentStatus !== 'checkedOut') lastShift = { key: childSnapshot.key, status: shift.currentStatus, checkIn: shift.checkIn };
+                    if (shift.currentStatus !== 'checkedOut') lastShift = { key: childSnapshot.key, status: shift.currentStatus, checkIn: shift.checkIn, breakIn: shift.breakIn, breakOut: shift.breakOut };
                 });
                 if (lastShift) {
                     currentShiftId = lastShift.key;
                     status = lastShift.status;
                     if (lastShift.checkIn?.timestamp) checkInTime = new Date(lastShift.checkIn.timestamp);
                     if (lastShift.checkIn?.capturedImage) capturedImage = lastShift.checkIn.capturedImage;
+                    // Load break times for accurate timer calculation
+                    if (lastShift.breakIn?.timestamp) {
+                        breakStartTime = new Date(lastShift.breakIn.timestamp);
+                        if (lastShift.breakOut?.timestamp) {
+                            // Break completed - calculate accumulated break time
+                            const breakEndTime = new Date(lastShift.breakOut.timestamp);
+                            accumulatedBreakTime = breakEndTime.getTime() - breakStartTime.getTime();
+                            breakStartTime = null; // Reset since break is over
+                        }
+                    }
                 }
             }
         } catch(err) { console.error("Error loading active shift:", err); }
@@ -242,10 +265,16 @@
                 await queueOfflineAction({ type: action, userId, shiftId: currentShiftId, data: newActionData });
                 pendingSyncCount = await getPendingCount(userId);
                 offlineStatus.update(s => ({ ...s, pendingActions: pendingSyncCount }));
-                if (action === 'checkIn') { status = 'checkedIn'; checkInTime = new Date(); capturedImage = image; }
+                if (action === 'checkIn') { status = 'checkedIn'; checkInTime = new Date(); capturedImage = image; accumulatedBreakTime = 0; breakStartTime = null; }
                 else if (action === 'checkOut') status = 'checkedOut';
-                else if (action === 'breakIn') status = 'onBreak';
-                else if (action === 'breakOut') status = 'checkedIn';
+                else if (action === 'breakIn') { status = 'onBreak'; breakStartTime = new Date(); }
+                else if (action === 'breakOut') { 
+                    status = 'checkedIn'; 
+                    if (breakStartTime) {
+                        accumulatedBreakTime += new Date().getTime() - breakStartTime.getTime();
+                        breakStartTime = null;
+                    }
+                }
                 alert(`📴 Offline Mode:\n${action} saved locally and will sync when online.`);
                 isProcessing = false; return;
             }
@@ -259,6 +288,8 @@
                 entryRef = push(ref(db, USER_PATH));
                 currentShiftId = entryRef.key;
                 checkInTime = new Date();
+                accumulatedBreakTime = 0;
+                breakStartTime = null;
                 await set(entryRef, { checkIn: newActionData, currentStatus: 'checkedIn', date: new Date().toDateString(), behaviorAnalysis: { riskLevel: behaviorAnalysis.risk, anomalyCount: behaviorAnalysis.anomalies.length } });
                 storeTrustedDevice(userId, device);
                 const streakResult = await updateStreak(userId, new Date().toISOString());
@@ -267,8 +298,22 @@
                 if (!currentShiftId) throw new Error("Please Check In first.");
                 entryRef = ref(db, `${USER_PATH}/${currentShiftId}`);
                 let updateData = {};
-                if(action==='breakIn') { if (status!=='checkedIn') throw new Error("Must be checked in."); status='onBreak'; updateData={ currentStatus:'onBreak', breakIn:newActionData }; }
-                else if(action==='breakOut') { if (status!=='onBreak') throw new Error("Must be on break."); status='checkedIn'; updateData={ currentStatus:'checkedIn', breakOut:newActionData }; }
+                if(action==='breakIn') { 
+                    if (status!=='checkedIn') throw new Error("Must be checked in."); 
+                    status='onBreak'; 
+                    breakStartTime = new Date();
+                    updateData={ currentStatus:'onBreak', breakIn:newActionData }; 
+                }
+                else if(action==='breakOut') { 
+                    if (status!=='onBreak') throw new Error("Must be on break."); 
+                    status='checkedIn'; 
+                    // Calculate break duration and add to accumulated time
+                    if (breakStartTime) {
+                        accumulatedBreakTime += new Date().getTime() - breakStartTime.getTime();
+                        breakStartTime = null;
+                    }
+                    updateData={ currentStatus:'checkedIn', breakOut:newActionData }; 
+                }
                 else if(action==='checkOut') { status='checkedOut'; updateData={ currentStatus:'checkedOut', checkOut:newActionData }; shouldReload=true; }
                 await update(entryRef, updateData);
             }
@@ -293,7 +338,28 @@
         else if (result.pending === 0) alert('All caught up! No pending actions.');
     }
 
-    $: timeOnShift = checkInTime ? currentTime.getTime() - checkInTime.getTime() : 0;
+    // Track break start time for pausing the timer
+    let breakStartTime = null;
+    let accumulatedBreakTime = 0; // Total break time in ms (for completed breaks)
+    
+    // Calculate time on shift, pausing during breaks
+    $: {
+        if (!checkInTime) {
+            timeOnShift = 0;
+        } else if (status === 'onBreak') {
+            // On break - freeze the timer at the moment break started
+            if (breakStartTime) {
+                timeOnShift = breakStartTime.getTime() - checkInTime.getTime() - accumulatedBreakTime;
+            } else {
+                // Fallback if breakStartTime not set
+                timeOnShift = currentTime.getTime() - checkInTime.getTime() - accumulatedBreakTime;
+            }
+        } else {
+            // Working or checked out - subtract all break time
+            timeOnShift = currentTime.getTime() - checkInTime.getTime() - accumulatedBreakTime;
+        }
+    }
+    let timeOnShift = 0;
     function formatDuration(ms) { if (!ms || ms < 0) return '00:00:00'; const s = Math.floor(ms / 1000); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60; return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`; }
     function getStatusText(s) { if (s === 'checkedIn') return 'Checked In'; if (s === 'onBreak') return 'On Break'; if (s === 'checkedOut') return 'Checked Out'; return 'Ready to Clock In'; }
     function getStatusColor(s) { if (s === 'checkedIn') return 'green'; if (s === 'onBreak') return 'yellow'; return 'gray'; }
