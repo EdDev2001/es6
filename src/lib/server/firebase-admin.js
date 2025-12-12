@@ -2,6 +2,7 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getDatabase } from 'firebase-admin/database';
+import { getStorage } from 'firebase-admin/storage';
 
 // Use dynamic import to avoid build errors when env vars are missing
 let FIREBASE_SERVICE_ACCOUNT = '';
@@ -23,6 +24,7 @@ try {
 
 let adminAuth = null;
 let adminDb = null;
+let adminStorage = null;
 
 if (!getApps().length && FIREBASE_SERVICE_ACCOUNT) {
     try {
@@ -45,19 +47,21 @@ if (!getApps().length && FIREBASE_SERVICE_ACCOUNT) {
 
         adminAuth = getAuth();
         adminDb = getDatabase();
+        adminStorage = getStorage();
     } catch (err) {
         console.error("Failed to initialize Firebase Admin:", err.message);
     }
 } else if (getApps().length) {
     adminAuth = getAuth();
     adminDb = getDatabase();
+    adminStorage = getStorage();
 } else {
     console.warn("⚠️ Running without Firebase Admin - FIREBASE_SERVICE_ACCOUNT not set");
     console.warn("⚠️ Server-side authentication will be disabled");
 }
 
 
-export { adminAuth, adminDb };
+export { adminAuth, adminDb, adminStorage };
 
 /**
  * @param {string} uid 
