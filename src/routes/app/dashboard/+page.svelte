@@ -3,7 +3,7 @@
     import { ref, get } from 'firebase/database';
     import { onMount } from 'svelte';
     import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, differenceInMinutes, subDays, isToday, parseISO, eachDayOfInterval, isSameDay } from 'date-fns';
-    import { IconCalendarStats, IconChartBar, IconArrowRight, IconClock, IconCalendarEvent, IconUserCheck, IconSun, IconMoon, IconActivity, IconTarget, IconFlame, IconChevronRight, IconMapPin, IconX, IconTrendingUp, IconTrendingDown, IconMinus, IconChartPie, IconBell, IconCalendar, IconAward, IconZap, IconCheck, IconAlertCircle } from "@tabler/icons-svelte";
+    import { IconCalendarStats, IconChartBar, IconArrowRight, IconClock, IconCalendarEvent, IconUserCheck, IconSun, IconMoon, IconActivity, IconTarget, IconFlame, IconChevronRight, IconMapPin, IconX, IconTrendingUp, IconTrendingDown, IconMinus, IconChartPie, IconBell, IconCalendar, IconAward, IconBolt, IconCheck, IconAlertCircle } from "@tabler/icons-svelte";
     import { getGamificationData, getBadgeById } from '$lib/stores/gamification.js';
     import { activeHoliday, seasonalPrefs } from '$lib/stores/seasonalTheme.js';
     import { ChristmasDailyReward } from '$lib/components/seasonal';
@@ -278,7 +278,7 @@
             insights.push({ type: 'warning', icon: IconAlertCircle, text: `On-time rate is ${attendanceStats.onTimeRate}%`, color: 'orange' });
         }
         if (attendanceStats.avgDailyHours >= 7) {
-            insights.push({ type: 'positive', icon: IconZap, text: `Averaging ${attendanceStats.avgDailyHours}h daily`, color: 'blue' });
+            insights.push({ type: 'positive', icon: IconBolt, text: `Averaging ${attendanceStats.avgDailyHours}h daily`, color: 'blue' });
         }
     }
 
@@ -529,7 +529,7 @@
                 <section class="insights-section">
                     <div class="section-header">
                         <h3 class="section-title">
-                            <IconZap size={18} stroke={1.5} />
+                            <IconBolt size={18} stroke={1.5} />
                             Quick Insights
                         </h3>
                     </div>
