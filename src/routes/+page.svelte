@@ -70,7 +70,7 @@
 </script>
 
 <svelte:head>
-    <title>Attendance System | Sign In</title>
+    <title>Student Attendance | Sign In</title>
 </svelte:head>
 
 <div class="login-page">
@@ -99,7 +99,7 @@
                         <IconShieldCheck size={32} stroke={1.5} />
                     </div>
                     <h1 class="login-title">Welcome Back</h1>
-                    <p class="login-subtitle">Sign in to access the Attendance Dashboard</p>
+                    <p class="login-subtitle">Sign in to track your class attendance</p>
                 </div>
 
                 {#if user}
@@ -152,7 +152,7 @@
                     <!-- Security Note -->
                     <div class="security-note">
                         <IconLock size={14} stroke={1.5} />
-                        <span>Secured with enterprise-grade encryption</span>
+                        <span>Your data is securely protected</span>
                     </div>
                 {/if}
             </div>

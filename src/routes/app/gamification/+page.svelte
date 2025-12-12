@@ -113,7 +113,7 @@
 </script>
 
 <svelte:head>
-    <title>Achievements | Attendance</title>
+    <title>Achievements | Student Attendance</title>
 </svelte:head>
 
 <div class="page-container">

@@ -127,7 +127,7 @@
     });
 </script>
 
-<svelte:head><title>Attendance History</title></svelte:head>
+<svelte:head><title>Attendance History | Student Attendance</title></svelte:head>
 
 <div class="history-page">
     <div class="history-content apple-animate-in">
@@ -349,7 +349,7 @@
                         <div class="calendar-legend">
                             <span class="legend-title">Legend</span>
                             <div class="legend-items">
-                                <div class="legend-item"><span class="legend-dot full"></span><span>8h+ worked</span></div>
+                                <div class="legend-item"><span class="legend-dot full"></span><span>8h+ attended</span></div>
                                 <div class="legend-item"><span class="legend-dot partial"></span><span>Partial day</span></div>
                                 <div class="legend-item"><span class="legend-dot late"></span><span>Late arrival</span></div>
                                 <div class="legend-item"><span class="legend-dot overtime"></span><span>Overtime</span></div>

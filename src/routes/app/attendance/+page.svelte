@@ -11,7 +11,7 @@
     } from "@tabler/icons-svelte";
     import { updateStreak, getGamificationData } from '$lib/stores/gamification.js';
     
-    // Enterprise Security Imports
+    // Security Imports
     import { generateDeviceFingerprint, getDeviceInfo, storeTrustedDevice, isDeviceTrusted } from '$lib/security/deviceFingerprint.js';
     import { createSecureSession, validateSession, updateSessionActivity } from '$lib/security/sessionManager.js';
     import { getCurrentLocation, validateLocationInGeofence, logLocationValidation } from '$lib/security/geofence.js';
@@ -365,14 +365,14 @@
     function getStatusColor(s) { if (s === 'checkedIn') return 'green'; if (s === 'onBreak') return 'yellow'; return 'gray'; }
 </script>
 
-<svelte:head><title>Attendance | Enterprise Attendance System</title></svelte:head>
+<svelte:head><title>Attendance | Student Attendance System</title></svelte:head>
 
 <div class="attendance-page">
     <div class="attendance-content apple-animate-in">
         <header class="page-header">
             <div class="header-main">
                 <h1 class="page-title">Attendance</h1>
-                <p class="page-subtitle">Enterprise-grade attendance tracking</p>
+                <p class="page-subtitle">Track your class attendance</p>
             </div>
             <div class="header-actions">
                 <button class="security-toggle" class:active={showSecurityPanel} on:click={() => showSecurityPanel = !showSecurityPanel}>

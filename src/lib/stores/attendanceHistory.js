@@ -1,14 +1,13 @@
 // src/lib/stores/attendanceHistory.js
 import { writable, derived } from 'svelte/store';
 
-// Configuration for work schedule
-// NOTE: Adjust standardStartTime to match your actual work schedule
-// e.g., '08:00' for 8 AM start, '09:00' for 9 AM start
+// Configuration for class schedule
+// NOTE: Adjust standardStartTime to match your actual class schedule
 export const workConfig = writable({
-    standardStartTime: '08:00',  // 8 AM start - adjust as needed
-    standardEndTime: '17:00',    // 5 PM end - adjust as needed
-    standardHoursPerDay: 8,
-    lateThresholdMinutes: 1,     // Late if check-in is even 1 minute after start time (more strict)
+    standardStartTime: '08:00',  // 8 AM class start
+    standardEndTime: '17:00',    // 5 PM class end (4:30-5 PM)
+    standardHoursPerDay: 8,      // ~8 hours of classes per day (8 AM - 5 PM with breaks)
+    lateThresholdMinutes: 1,     // Late if check-in is even 1 minute after start time
     overtimeThresholdMinutes: 30,
     breakDurationMinutes: 60
 });

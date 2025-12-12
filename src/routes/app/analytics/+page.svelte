@@ -137,7 +137,7 @@
     $: if (selectedPeriod && records.length > 0) calculateAnalytics();
 </script>
 
-<svelte:head><title>Analytics | Attendance System</title></svelte:head>
+<svelte:head><title>Analytics | Student Attendance</title></svelte:head>
 
 <div class="analytics-page">
     {#if isLoading}
@@ -267,7 +267,7 @@
                     <div class="chart-header">
                         <div>
                             <h3 class="chart-title">Daily Hours</h3>
-                            <p class="chart-subtitle">Your work hours over time</p>
+                            <p class="chart-subtitle">Your class hours over time</p>
                         </div>
                         <IconTrendingUp size={20} stroke={1.5} class="chart-icon" />
                     </div>
@@ -281,7 +281,7 @@
                         />
                     </div>
                     <div class="chart-legend">
-                        <span class="legend-item"><span class="legend-dot legend-blue"></span> Work days</span>
+                        <span class="legend-item"><span class="legend-dot legend-blue"></span> Class days</span>
                         <span class="legend-item"><span class="legend-dot legend-gray"></span> Weekends</span>
                     </div>
                 </div>

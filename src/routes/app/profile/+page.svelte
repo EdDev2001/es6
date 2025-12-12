@@ -1,13 +1,14 @@
 <script>
     import { auth, db, USER_PROFILE_PATH, getUserProfile } from "$lib/firebase";
     import { ref, update } from "firebase/database";
-    import { IconUser, IconCheck, IconAlertTriangle, IconPalette, IconBell, IconShieldLock, IconSparkles } from "@tabler/icons-svelte";
+    import { IconUser, IconCheck, IconAlertTriangle, IconPalette, IconBell, IconShieldLock, IconSparkles, IconMessageCircle } from "@tabler/icons-svelte";
     import { onMount } from "svelte";
     import ProfileCustomization from "$lib/components/ProfileCustomization.svelte";
     import NotificationsCenter from "$lib/components/NotificationsCenter.svelte";
     import PrivacySettings from "$lib/components/PrivacySettings.svelte";
     import { SeasonalSettings } from "$lib/components/seasonal";
     import { themeStore } from "$lib/stores/theme.js";
+    import FeedbackCenter from "$lib/components/FeedbackCenter.svelte";
 
     let user = null;
     let userProfile = null;
@@ -17,6 +18,7 @@
     let saveError = "";
     let activeTab = "info";
     let formData = { name: "", year: "", departmentOrCourse: "", section: "" };
+    let showFeedbackModal = false;
 
     onMount(async () => {
         themeStore.init();
@@ -62,7 +64,7 @@
     }
 </script>
 
-<svelte:head><title>Profile | Attendance System</title></svelte:head>
+<svelte:head><title>Profile | Student Attendance</title></svelte:head>
 
 <div class="profile-page">
     <div class="profile-content apple-animate-in">
@@ -112,6 +114,14 @@
             >
                 <IconSparkles size={18} stroke={1.5} />
                 <span>Seasonal</span>
+            </button>
+            <button 
+                class="tab-btn" 
+                class:tab-active={activeTab === 'feedback'}
+                on:click={() => activeTab = 'feedback'}
+            >
+                <IconMessageCircle size={18} stroke={1.5} />
+                <span>Feedback</span>
             </button>
         </div>
 
@@ -233,9 +243,42 @@
                     <SeasonalSettings />
                 </div>
             {/if}
+
+            <!-- Feedback Tab -->
+            {#if activeTab === 'feedback'}
+                <div class="profile-card apple-animate-in">
+                    <div class="card-header">
+                        <div class="header-icon header-icon-blue"><IconMessageCircle size={24} stroke={1.5} /></div>
+                        <div class="header-text">
+                            <h2 class="card-title">Send Feedback</h2>
+                            <p class="card-subtitle">Help us improve your experience</p>
+                        </div>
+                    </div>
+
+                    <div class="feedback-options">
+                        <p class="feedback-intro">We'd love to hear from you! Report issues, suggest improvements, or share your experience.</p>
+                        
+                        <button class="feedback-btn" on:click={() => showFeedbackModal = true}>
+                            <IconMessageCircle size={20} stroke={1.5} />
+                            <span>Open Feedback Center</span>
+                        </button>
+
+                        <a href="/app/feedback" class="feedback-link">
+                            View all my feedback →
+                        </a>
+                    </div>
+                </div>
+            {/if}
         {/if}
     </div>
 </div>
+
+<!-- Feedback Modal -->
+<FeedbackCenter 
+    bind:show={showFeedbackModal} 
+    userId={user?.uid}
+    on:close={() => showFeedbackModal = false}
+/>
 
 <style>
     .profile-page { min-height: 100%; padding: clamp(16px, 4vw, 40px); background: var(--theme-bg, var(--apple-light-bg)); }
@@ -322,6 +365,7 @@
     .header-icon-purple { background: rgba(175, 82, 222, 0.1); color: #AF52DE; }
     .header-icon-orange { background: rgba(255, 149, 0, 0.1); color: #FF9500; }
     .header-icon-green { background: rgba(52, 199, 89, 0.1); color: #34C759; }
+    .header-icon-blue { background: rgba(0, 122, 255, 0.1); color: #007AFF; }
     .card-title { font-size: 20px; font-weight: 600; color: var(--theme-text, var(--apple-black)); margin-bottom: 4px; }
     .card-subtitle { font-size: 14px; color: var(--theme-text-secondary, var(--apple-gray-1)); }
     .alert { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: var(--apple-radius-md); margin-bottom: 20px; font-size: 14px; font-weight: 500; }
@@ -338,4 +382,12 @@
     .submit-btn:disabled { background: var(--apple-gray-3); cursor: not-allowed; }
     .btn-spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Feedback Tab Styles */
+    .feedback-options { display: flex; flex-direction: column; gap: 16px; }
+    .feedback-intro { font-size: 15px; color: var(--theme-text-secondary, var(--apple-gray-1)); line-height: 1.5; }
+    .feedback-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 16px; background: var(--apple-accent); color: white; font-size: 16px; font-weight: 600; border: none; border-radius: var(--apple-radius-md); cursor: pointer; transition: var(--apple-transition); }
+    .feedback-btn:hover { background: var(--apple-accent-hover); transform: translateY(-1px); }
+    .feedback-link { text-align: center; font-size: 14px; color: var(--apple-accent); text-decoration: none; font-weight: 500; }
+    .feedback-link:hover { text-decoration: underline; }
 </style>

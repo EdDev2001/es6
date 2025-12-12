@@ -2,8 +2,8 @@
 import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth, differenceInMinutes, getDay, subDays, eachDayOfInterval } from 'date-fns';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const STANDARD_CHECK_IN = 9 * 60; // 9:00 AM in minutes
-const STANDARD_HOURS = 8; // 8 hours workday
+const STANDARD_CHECK_IN = 8 * 60; // 8:00 AM in minutes (class start time)
+const STANDARD_HOURS = 8; // 8 hours class day (8 AM - 5 PM with breaks)
 
 /**
  * Calculate attendance percentage for a given period

@@ -7,7 +7,7 @@
     import { themeStore } from "$lib/stores/theme.js";
     import { seasonalPrefs, activeHoliday } from "$lib/stores/seasonalTheme.js";
     import { SeasonalEffects, SeasonalDecorations, SeasonalProfileBadge, SeasonalLoginCelebration, ChristmasExtras, ChristmasNavSnowflakes, SeasonalIntroduction } from "$lib/components/seasonal";
-    import { IconMenu2, IconX, IconClockPin, IconListDetails, IconHome, IconUser, IconLogout, IconChevronRight, IconChartBar, IconTrophy } from "@tabler/icons-svelte";
+    import { IconMenu2, IconX, IconClockPin, IconListDetails, IconHome, IconUser, IconLogout, IconChevronRight, IconChartBar, IconTrophy, IconMessageCircle, IconId } from "@tabler/icons-svelte";
     import AppInstallPrompt from "$lib/components/AppInstallPrompt.svelte";
     import DeepLinkHandler from "$lib/components/DeepLinkHandler.svelte";
 
@@ -77,9 +77,11 @@
     const navLinks = [
         { href: '/app/dashboard', icon: IconHome, label: 'Dashboard' },
         { href: '/app/attendance', icon: IconClockPin, label: 'Attendance' },
+        { href: '/app/epass', icon: IconId, label: 'E-Pass' },
         { href: '/app/history', icon: IconListDetails, label: 'History' },
         { href: '/app/analytics', icon: IconChartBar, label: 'Analytics' },
         { href: '/app/gamification', icon: IconTrophy, label: 'Achievements' },
+        { href: '/app/feedback', icon: IconMessageCircle, label: 'Feedback' },
         { href: '/app/profile', icon: IconUser, label: 'Profile' }
     ];
 
@@ -109,7 +111,7 @@
     <div class="mobile-header-content">
         <div class="mobile-brand">
             <img src="/logo.png" alt="Logo" class="brand-logo" />
-            <span class="brand-text">Attendance System</span>
+            <span class="brand-text">Student Attendance</span>
         </div>
         <button class="menu-btn" on:click={() => (sidebarOpen = true)} aria-label="Open menu">
             <IconMenu2 size={24} stroke={1.5} />
@@ -129,7 +131,7 @@
         <div class="sidebar-header">
             <div class="sidebar-brand-wrapper">
                 <img src="/logo.png" alt="Logo" class="sidebar-logo" />
-                <span class="sidebar-brand">Attendance System</span>
+                <span class="sidebar-brand">Student Attendance</span>
             </div>
             <button class="close-btn" on:click={closeSidebar} aria-label="Close menu">
                 <IconX size={20} stroke={1.5} />
@@ -190,9 +192,9 @@
     {#each navLinks as link}
         <a href={link.href} 
            class="mobile-nav-link"
-           class:mobile-nav-active={isActive(link.href)}>
-            <svelte:component this={link.icon} size={22} stroke={isActive(link.href) ? 2 : 1.5} />
-            <span class="mobile-nav-label">{link.label}</span>
+           class:mobile-nav-active={isActive(link.href)}
+           aria-label={link.label}>
+            <svelte:component this={link.icon} size={24} stroke={isActive(link.href) ? 2 : 1.5} />
         </a>
     {/each}
 </nav>
@@ -550,23 +552,21 @@
 
     .mobile-nav-link {
         display: flex;
-        flex-direction: column;
         align-items: center;
-        gap: 4px;
+        justify-content: center;
         flex: 1;
-        padding: 6px 0;
+        padding: 12px 0;
         color: var(--theme-text-secondary, var(--apple-gray-1));
         text-decoration: none;
         transition: var(--apple-transition);
     }
 
-    .mobile-nav-active {
-        color: var(--apple-accent);
+    .mobile-nav-link:active {
+        transform: scale(0.9);
     }
 
-    .mobile-nav-label {
-        font-size: 10px;
-        font-weight: 500;
+    .mobile-nav-active {
+        color: var(--apple-accent);
     }
 
     /* Responsive - Tablet & Mobile */

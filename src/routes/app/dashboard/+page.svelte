@@ -2,8 +2,8 @@
     import { auth, getUserProfile, db } from '$lib/firebase';
     import { ref, get } from 'firebase/database';
     import { onMount } from 'svelte';
-    import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, differenceInMinutes } from 'date-fns';
-    import { IconCalendarStats, IconChartBar, IconArrowRight, IconClock, IconCalendarEvent, IconUserCheck, IconSun, IconMoon, IconActivity, IconTarget, IconFlame, IconChevronRight, IconMapPin, IconDevices, IconX } from "@tabler/icons-svelte";
+    import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, differenceInMinutes, subDays, isToday, parseISO, eachDayOfInterval, isSameDay } from 'date-fns';
+    import { IconCalendarStats, IconChartBar, IconArrowRight, IconClock, IconCalendarEvent, IconUserCheck, IconSun, IconMoon, IconActivity, IconTarget, IconFlame, IconChevronRight, IconMapPin, IconX, IconTrendingUp, IconTrendingDown, IconMinus, IconChartPie, IconBell, IconCalendar, IconAward, IconZap, IconCheck, IconAlertCircle } from "@tabler/icons-svelte";
     import { getGamificationData, getBadgeById } from '$lib/stores/gamification.js';
     import { activeHoliday, seasonalPrefs } from '$lib/stores/seasonalTheme.js';
     import { ChristmasDailyReward } from '$lib/components/seasonal';
@@ -13,13 +13,30 @@
     let isLoading = true;
     let currentTime = new Date();
     let greeting = '';
-    let attendanceStats = { todayStatus: 'not_checked_in', todayCheckIn: null, todayHours: 0, weekHours: 0, monthDays: 0, monthHours: 0, streak: 0, avgCheckIn: null, recentActivity: [] };
+    let attendanceStats = { 
+        todayStatus: 'not_checked_in', 
+        todayCheckIn: null, 
+        todayHours: 0, 
+        weekHours: 0, 
+        monthDays: 0, 
+        monthHours: 0, 
+        streak: 0, 
+        avgCheckIn: null, 
+        recentActivity: [],
+        weeklyData: [],
+        totalRecords: 0,
+        onTimeRate: 0,
+        avgDailyHours: 0,
+        bestStreak: 0,
+        lastWeekHours: 0
+    };
     let timeInterval;
     let userBadges = [];
     let showActivityModal = false;
     let allRecentActivity = [];
-    let todayRecord = null; // Store today's record for reactive hour calculation
+    let todayRecord = null;
     let unsubscribers = [];
+    let insights = [];
 
     function openActivityModal() {
         showActivityModal = true;
@@ -41,7 +58,6 @@
         if (user) { 
             userProfile = await getUserProfile(user.uid); 
             await loadAttendanceStats(user.uid);
-            // Subscribe to real-time updates for today's attendance
             const todayUnsub = subscribeToTodayAttendance(user.uid, (todayData) => {
                 if (todayData) {
                     todayRecord = { ...todayRecord, ...todayData, currentStatus: todayData.currentStatus };
@@ -49,14 +65,12 @@
                     if (todayData.checkIn?.timestamp) {
                         attendanceStats.todayCheckIn = todayData.checkIn.timestamp;
                     }
-                    // Recalculate hours when status changes
                     if (todayRecord?.checkIn?.timestamp) {
                         attendanceStats.todayHours = getWorkMinutes(todayRecord, true) / 60;
                     }
                 }
             });
             unsubscribers.push(todayUnsub);
-            // Load user badges
             const gamifData = await getGamificationData(user.uid);
             if (gamifData?.badges?.length > 0) {
                 userBadges = gamifData.badges.slice(-3).reverse().map(id => getBadgeById(id)).filter(Boolean);
@@ -77,61 +91,41 @@
         else greeting = 'Good Evening';
     }
 
-    // Helper function to calculate break minutes for a record
     function getBreakMinutes(record, isToday = false) {
         const breakStart = record.breakIn?.timestamp || record.breakStart?.timestamp;
         const breakEnd = record.breakOut?.timestamp || record.breakEnd?.timestamp;
-        
         if (!breakStart) return 0;
-        
         const breakStartTime = new Date(breakStart);
-        
-        // If on break and it's today, break is ongoing - calculate from break start to now
         if (isToday && record.currentStatus === 'onBreak') {
             return differenceInMinutes(new Date(), breakStartTime);
         }
-        
-        // If break ended, calculate the break duration
         if (breakEnd) {
             return differenceInMinutes(new Date(breakEnd), breakStartTime);
         }
-        
         return 0;
     }
 
-    // Helper function to calculate work minutes for a record
     function getWorkMinutes(record, isToday = false) {
         if (!record.checkIn?.timestamp) return 0;
-        
         const checkIn = new Date(record.checkIn.timestamp);
         let endTime;
-        
         if (record.checkOut?.timestamp) {
-            // Shift completed
             endTime = new Date(record.checkOut.timestamp);
         } else if (isToday) {
-            // Still working today
             if (record.currentStatus === 'onBreak') {
-                // On break - use break start time as end point (pause the timer)
                 const breakStart = record.breakIn?.timestamp || record.breakStart?.timestamp;
                 endTime = breakStart ? new Date(breakStart) : new Date();
             } else {
-                // Working - use current time
                 endTime = new Date();
             }
         } else {
-            // Past day without checkout - use check-in time (0 hours)
             return 0;
         }
-        
         const totalMinutes = differenceInMinutes(endTime, checkIn);
         const breakMinutes = getBreakMinutes(record, isToday);
-        
-        // Only subtract break time if not currently on break (already handled above)
         if (record.currentStatus !== 'onBreak') {
             return Math.max(0, totalMinutes - breakMinutes);
         }
-        
         return Math.max(0, totalMinutes);
     }
 
@@ -141,122 +135,235 @@
             if (!snapshot.exists()) return;
             const records = [];
             snapshot.forEach(child => { records.push({ id: child.key, ...child.val() }); });
-            const today = new Date().toDateString();
-            const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
-            const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
-            const monthStart = startOfMonth(new Date());
-            const monthEnd = endOfMonth(new Date());
+            
+            const today = new Date();
+            const todayStr = today.toDateString();
+            const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+            const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
+            const monthStart = startOfMonth(today);
+            const monthEnd = endOfMonth(today);
+            const lastWeekStart = subDays(weekStart, 7);
+            const lastWeekEnd = subDays(weekStart, 1);
 
-            todayRecord = records.find(r => r.date === today) || null;
+            todayRecord = records.find(r => r.date === todayStr) || null;
             if (todayRecord) {
                 attendanceStats.todayStatus = todayRecord.currentStatus;
                 attendanceStats.todayCheckIn = todayRecord.checkIn?.timestamp;
-                // Initial calculation - will be updated reactively
                 if (todayRecord.checkIn?.timestamp) {
                     attendanceStats.todayHours = getWorkMinutes(todayRecord, true) / 60;
                 }
             }
 
+            // Weekly data for chart
+            const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
+            attendanceStats.weeklyData = weekDays.map(day => {
+                const dayRecord = records.find(r => r.date === day.toDateString());
+                const hours = dayRecord ? getWorkMinutes(dayRecord, day.toDateString() === todayStr) / 60 : 0;
+                return {
+                    day: format(day, 'EEE'),
+                    date: format(day, 'MMM d'),
+                    hours: Math.round(hours * 10) / 10,
+                    isToday: day.toDateString() === todayStr,
+                    hasRecord: !!dayRecord
+                };
+            });
+
             let weekMinutes = 0;
+            let lastWeekMinutes = 0;
             records.forEach(r => {
                 const recordDate = new Date(r.date);
                 if (recordDate >= weekStart && recordDate <= weekEnd && r.checkIn?.timestamp) {
-                    const isToday = r.date === today;
-                    weekMinutes += getWorkMinutes(r, isToday);
+                    weekMinutes += getWorkMinutes(r, r.date === todayStr);
+                }
+                if (recordDate >= lastWeekStart && recordDate <= lastWeekEnd && r.checkIn?.timestamp) {
+                    lastWeekMinutes += getWorkMinutes(r, false);
                 }
             });
             attendanceStats.weekHours = Math.round(weekMinutes / 60 * 10) / 10;
+            attendanceStats.lastWeekHours = Math.round(lastWeekMinutes / 60 * 10) / 10;
 
             let monthMinutes = 0, monthDays = 0;
             records.forEach(r => {
                 const recordDate = new Date(r.date);
                 if (recordDate >= monthStart && recordDate <= monthEnd && r.checkIn?.timestamp) {
                     monthDays++;
-                    const isToday = r.date === today;
-                    monthMinutes += getWorkMinutes(r, isToday);
+                    monthMinutes += getWorkMinutes(r, r.date === todayStr);
                 }
             });
             attendanceStats.monthDays = monthDays;
             attendanceStats.monthHours = Math.round(monthMinutes / 60 * 10) / 10;
+            attendanceStats.totalRecords = records.length;
+            attendanceStats.avgDailyHours = records.length > 0 ? Math.round((monthMinutes / 60 / Math.max(monthDays, 1)) * 10) / 10 : 0;
 
+            // Calculate on-time rate (check-in before 9 AM)
+            const onTimeRecords = records.filter(r => {
+                if (!r.checkIn?.timestamp) return false;
+                const checkInTime = new Date(r.checkIn.timestamp);
+                return checkInTime.getHours() < 9 || (checkInTime.getHours() === 9 && checkInTime.getMinutes() === 0);
+            });
+            attendanceStats.onTimeRate = records.length > 0 ? Math.round((onTimeRecords.length / records.length) * 100) : 0;
+
+            // Streak calculation
             let streak = 0;
+            let bestStreak = 0;
+            let currentStreak = 0;
             const sortedRecords = records.sort((a, b) => new Date(b.date) - new Date(a.date));
+            
             for (let i = 0; i < sortedRecords.length; i++) {
                 const expectedDate = new Date();
                 expectedDate.setDate(expectedDate.getDate() - i);
-                if (sortedRecords[i]?.date === expectedDate.toDateString()) streak++;
-                else break;
+                if (sortedRecords[i]?.date === expectedDate.toDateString()) {
+                    streak++;
+                } else break;
+            }
+            
+            // Best streak calculation
+            const sortedAsc = [...records].sort((a, b) => new Date(a.date) - new Date(b.date));
+            for (let i = 0; i < sortedAsc.length; i++) {
+                if (i === 0) {
+                    currentStreak = 1;
+                } else {
+                    const prevDate = new Date(sortedAsc[i-1].date);
+                    const currDate = new Date(sortedAsc[i].date);
+                    const diffDays = Math.round((currDate - prevDate) / (1000 * 60 * 60 * 24));
+                    if (diffDays === 1) {
+                        currentStreak++;
+                    } else {
+                        currentStreak = 1;
+                    }
+                }
+                bestStreak = Math.max(bestStreak, currentStreak);
             }
             attendanceStats.streak = streak;
-            allRecentActivity = sortedRecords.map(r => ({ date: r.date, status: r.currentStatus, checkIn: r.checkIn?.timestamp, checkOut: r.checkOut?.timestamp, location: r.checkIn?.location?.name }));
-            attendanceStats.recentActivity = allRecentActivity.slice(0, 4);
+            attendanceStats.bestStreak = bestStreak;
 
-            const checkInTimes = records.filter(r => r.checkIn?.timestamp).map(r => { const d = new Date(r.checkIn.timestamp); return d.getHours() * 60 + d.getMinutes(); });
+            allRecentActivity = sortedRecords.map(r => ({ 
+                date: r.date, 
+                status: r.currentStatus, 
+                checkIn: r.checkIn?.timestamp, 
+                checkOut: r.checkOut?.timestamp, 
+                location: r.checkIn?.location?.name,
+                hours: getWorkMinutes(r, r.date === todayStr) / 60
+            }));
+            attendanceStats.recentActivity = allRecentActivity.slice(0, 5);
+
+            const checkInTimes = records.filter(r => r.checkIn?.timestamp).map(r => { 
+                const d = new Date(r.checkIn.timestamp); 
+                return d.getHours() * 60 + d.getMinutes(); 
+            });
             if (checkInTimes.length > 0) {
                 const avgMinutes = checkInTimes.reduce((a, b) => a + b, 0) / checkInTimes.length;
                 attendanceStats.avgCheckIn = `${Math.floor(avgMinutes / 60)}:${Math.round(avgMinutes % 60).toString().padStart(2, '0')}`;
             }
+
+            // Generate insights
+            generateInsights();
         } catch (error) { console.error('Error loading stats:', error); }
     }
 
-    function formatHours(hours) { const h = Math.floor(hours); const m = Math.round((hours - h) * 60); return `${h}h ${m}m`; }
-    function getStatusColor(status) { if (status === 'checkedIn') return 'green'; if (status === 'onBreak') return 'yellow'; return 'gray'; }
-    function getStatusText(status) { if (status === 'checkedIn') return 'Working'; if (status === 'onBreak') return 'On Break'; if (status === 'checkedOut') return 'Completed'; return 'Not Started'; }
+    function generateInsights() {
+        insights = [];
+        const weekDiff = attendanceStats.weekHours - attendanceStats.lastWeekHours;
+        if (weekDiff > 0) {
+            insights.push({ type: 'positive', icon: IconTrendingUp, text: `${Math.abs(weekDiff).toFixed(1)}h more than last week`, color: 'green' });
+        } else if (weekDiff < 0) {
+            insights.push({ type: 'warning', icon: IconTrendingDown, text: `${Math.abs(weekDiff).toFixed(1)}h less than last week`, color: 'orange' });
+        }
+        if (attendanceStats.streak >= 5) {
+            insights.push({ type: 'achievement', icon: IconFlame, text: `${attendanceStats.streak} day streak! Keep it up!`, color: 'orange' });
+        }
+        if (attendanceStats.onTimeRate >= 90) {
+            insights.push({ type: 'positive', icon: IconCheck, text: `${attendanceStats.onTimeRate}% on-time rate - Excellent!`, color: 'green' });
+        } else if (attendanceStats.onTimeRate < 70 && attendanceStats.totalRecords > 5) {
+            insights.push({ type: 'warning', icon: IconAlertCircle, text: `On-time rate is ${attendanceStats.onTimeRate}%`, color: 'orange' });
+        }
+        if (attendanceStats.avgDailyHours >= 7) {
+            insights.push({ type: 'positive', icon: IconZap, text: `Averaging ${attendanceStats.avgDailyHours}h daily`, color: 'blue' });
+        }
+    }
 
-    // Reactively recalculate today's hours when time changes
-    // Only updates when actively working (checkedIn), pauses when on break or checked out
+    function formatHours(hours) { 
+        const h = Math.floor(hours); 
+        const m = Math.round((hours - h) * 60); 
+        return `${h}h ${m}m`; 
+    }
+    
+    function formatHoursShort(hours) {
+        return `${hours.toFixed(1)}h`;
+    }
+    
+    function getStatusColor(status) { 
+        if (status === 'checkedIn') return 'green'; 
+        if (status === 'onBreak') return 'yellow'; 
+        return 'gray'; 
+    }
+    
+    function getStatusText(status) { 
+        if (status === 'checkedIn') return 'Working'; 
+        if (status === 'onBreak') return 'On Break'; 
+        if (status === 'checkedOut') return 'Completed'; 
+        return 'Not Started'; 
+    }
+
+    function getWeekTrend() {
+        const diff = attendanceStats.weekHours - attendanceStats.lastWeekHours;
+        if (diff > 2) return { icon: IconTrendingUp, color: 'green', text: '+' + diff.toFixed(1) + 'h' };
+        if (diff < -2) return { icon: IconTrendingDown, color: 'red', text: diff.toFixed(1) + 'h' };
+        return { icon: IconMinus, color: 'gray', text: 'Same' };
+    }
+
     $: if (currentTime && todayRecord?.checkIn?.timestamp) {
-        // Only recalculate if actively working (not on break, not checked out)
         if (todayRecord.currentStatus === 'checkedIn') {
             attendanceStats.todayHours = getWorkMinutes(todayRecord, true) / 60;
         }
-        // When on break or checked out, hours stay frozen at last calculated value
     }
 
     $: progressPercent = Math.min((attendanceStats.todayHours / 8) * 100, 100);
     $: weekProgress = Math.min((attendanceStats.weekHours / 40) * 100, 100);
+    $: maxChartHours = Math.max(...attendanceStats.weeklyData.map(d => d.hours), 8);
+    $: weekTrend = getWeekTrend();
 </script>
 
-<svelte:head><title>Dashboard | Attendance System</title></svelte:head>
+<svelte:head><title>Dashboard | Student Attendance</title></svelte:head>
 
 <div class="dashboard-page">
     {#if isLoading}
-        <div class="loading-container apple-animate-in"><div class="apple-spinner"></div><p class="loading-text">Loading your dashboard...</p></div>
+        <div class="loading-container apple-animate-in">
+            <div class="apple-spinner"></div>
+            <p class="loading-text">Loading your dashboard...</p>
+        </div>
     {:else if userProfile}
         <div class="dashboard-content">
+            <!-- Hero Section -->
             <section class="hero-section apple-animate-in">
-                <!-- Animated Background Particles -->
                 <div class="particles-container">
                     <div class="particle particle-1"></div>
                     <div class="particle particle-2"></div>
                     <div class="particle particle-3"></div>
                     <div class="particle particle-4"></div>
-                    <div class="particle particle-5"></div>
-                    <div class="particle particle-6"></div>
-                    <div class="particle particle-7"></div>
-                    <div class="particle particle-8"></div>
                     <div class="orb orb-1"></div>
                     <div class="orb orb-2"></div>
-                    <div class="orb orb-3"></div>
-                    <div class="glow-ring glow-ring-1"></div>
-                    <div class="glow-ring glow-ring-2"></div>
                 </div>
                 <div class="hero-content">
                     <div class="hero-text">
                         <div class="greeting-row">
-                            {#if currentTime.getHours() < 17}<IconSun size={24} stroke={1.5} class="greeting-icon" />{:else}<IconMoon size={24} stroke={1.5} class="greeting-icon" />{/if}
+                            {#if currentTime.getHours() < 17}
+                                <IconSun size={20} stroke={1.5} class="greeting-icon" />
+                            {:else}
+                                <IconMoon size={20} stroke={1.5} class="greeting-icon" />
+                            {/if}
                             <span class="greeting-label">{greeting}</span>
                         </div>
                         <div class="name-with-badges">
                             <h1 class="hero-title">{userProfile.name.split(' ')[0]}</h1>
                             {#if userBadges.length > 0}
-                            <div class="floating-badges">
-                                {#each userBadges as badge}
-                                <div class="floating-badge" title="{badge.name}: {badge.description}" style="--badge-color: {badge.color}">
-                                    <span class="badge-icon">{badge.icon}</span>
+                                <div class="floating-badges">
+                                    {#each userBadges as badge}
+                                        <div class="floating-badge" title="{badge.name}">
+                                            <span class="badge-icon">{badge.icon}</span>
+                                        </div>
+                                    {/each}
                                 </div>
-                                {/each}
-                            </div>
                             {/if}
                         </div>
                         <p class="hero-subtitle">{format(currentTime, 'EEEE, MMMM d, yyyy')}</p>
@@ -267,42 +374,192 @@
                     </div>
                 </div>
                 <div class="quick-status">
-                    <div class="status-indicator status-{getStatusColor(attendanceStats.todayStatus)}"><IconActivity size={16} stroke={2} /><span>{getStatusText(attendanceStats.todayStatus)}</span></div>
-                    {#if attendanceStats.todayCheckIn}<span class="checkin-time"><IconClock size={14} stroke={1.5} />Checked in at {format(new Date(attendanceStats.todayCheckIn), 'h:mm a')}</span>{/if}
+                    <div class="status-indicator status-{getStatusColor(attendanceStats.todayStatus)}">
+                        <IconActivity size={14} stroke={2} />
+                        <span>{getStatusText(attendanceStats.todayStatus)}</span>
+                    </div>
+                    {#if attendanceStats.todayCheckIn}
+                        <span class="checkin-time">
+                            <IconClock size={14} stroke={1.5} />
+                            Checked in at {format(new Date(attendanceStats.todayCheckIn), 'h:mm a')}
+                        </span>
+                    {/if}
                 </div>
             </section>
 
+            <!-- Today's Progress Card -->
             <section class="progress-section apple-animate-in">
                 <div class="progress-card">
                     <div class="progress-header">
-                        <div><h3 class="progress-title">Today's Progress</h3><p class="progress-subtitle">Daily work hours tracking</p></div>
-                        <div class="progress-value"><span class="hours-worked">{formatHours(attendanceStats.todayHours)}</span><span class="hours-target">/ 8h goal</span></div>
+                        <div>
+                            <h3 class="progress-title">Today's Progress</h3>
+                            <p class="progress-subtitle">Daily attendance tracking</p>
+                        </div>
+                        <div class="progress-value">
+                            <span class="hours-worked">{formatHours(attendanceStats.todayHours)}</span>
+                            <span class="hours-target">/ 8h goal</span>
+                        </div>
                     </div>
-                    <div class="progress-bar-container"><div class="progress-bar" style="width: {progressPercent}%"></div></div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" style="width: {progressPercent}%"></div>
+                    </div>
                     <div class="progress-footer">
                         <span class="progress-percent">{Math.round(progressPercent)}% complete</span>
-                        <a href="/app/attendance" class="view-btn"><span>{attendanceStats.todayStatus === 'not_checked_in' ? 'Start Working' : 'View Details'}</span><IconArrowRight size={16} stroke={2} /></a>
+                        <a href="/app/attendance" class="view-btn">
+                            <span>{attendanceStats.todayStatus === 'not_checked_in' ? 'Start Working' : 'View Details'}</span>
+                            <IconArrowRight size={16} stroke={2} />
+                        </a>
                     </div>
                 </div>
             </section>
 
+            <!-- Stats Grid -->
             <section class="stats-section apple-animate-in">
                 <div class="stats-grid">
-                    <div class="stat-card"><div class="stat-icon stat-icon-blue"><IconCalendarStats size={22} stroke={1.5} /></div><div class="stat-content"><span class="stat-value">{attendanceStats.weekHours}<span class="stat-unit">h</span></span><span class="stat-label">This Week</span></div><div class="stat-progress"><div class="mini-progress"><div class="mini-progress-bar" style="width: {weekProgress}%"></div></div><span class="stat-target">{Math.round(weekProgress)}% of 40h</span></div></div>
-                    <div class="stat-card"><div class="stat-icon stat-icon-green"><IconCalendarEvent size={22} stroke={1.5} /></div><div class="stat-content"><span class="stat-value">{attendanceStats.monthDays}<span class="stat-unit">days</span></span><span class="stat-label">This Month</span></div><div class="stat-meta"><IconClock size={14} stroke={1.5} /><span>{attendanceStats.monthHours}h total</span></div></div>
-                    <div class="stat-card"><div class="stat-icon stat-icon-orange"><IconFlame size={22} stroke={1.5} /></div><div class="stat-content"><span class="stat-value">{attendanceStats.streak}<span class="stat-unit">days</span></span><span class="stat-label">Current Streak</span></div><div class="stat-badge">{#if attendanceStats.streak >= 5}<span class="badge badge-gold">🔥 On Fire!</span>{:else if attendanceStats.streak >= 3}<span class="badge badge-silver">⚡ Great!</span>{:else}<span class="badge badge-bronze">Keep going!</span>{/if}</div></div>
-                    <div class="stat-card"><div class="stat-icon stat-icon-purple"><IconTarget size={22} stroke={1.5} /></div><div class="stat-content"><span class="stat-value">{attendanceStats.avgCheckIn || '--:--'}</span><span class="stat-label">Avg Check-in</span></div></div>
+                    <div class="stat-card">
+                        <div class="stat-icon stat-icon-blue">
+                            <IconCalendarStats size={20} stroke={1.5} />
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-value">{attendanceStats.weekHours}<span class="stat-unit">h</span></span>
+                            <span class="stat-label">This Week</span>
+                        </div>
+                        <div class="stat-trend trend-{weekTrend.color}">
+                            <svelte:component this={weekTrend.icon} size={14} stroke={2} />
+                            <span>{weekTrend.text}</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon stat-icon-green">
+                            <IconCalendarEvent size={20} stroke={1.5} />
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-value">{attendanceStats.monthDays}<span class="stat-unit">days</span></span>
+                            <span class="stat-label">This Month</span>
+                        </div>
+                        <div class="stat-meta">
+                            <IconClock size={12} stroke={1.5} />
+                            <span>{attendanceStats.monthHours}h total</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon stat-icon-orange">
+                            <IconFlame size={20} stroke={1.5} />
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-value">{attendanceStats.streak}<span class="stat-unit">days</span></span>
+                            <span class="stat-label">Current Streak</span>
+                        </div>
+                        <div class="stat-badge">
+                            {#if attendanceStats.streak >= 5}
+                                <span class="badge badge-gold">🔥 On Fire!</span>
+                            {:else if attendanceStats.streak >= 3}
+                                <span class="badge badge-silver">⚡ Great!</span>
+                            {:else}
+                                <span class="badge badge-bronze">Keep going!</span>
+                            {/if}
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon stat-icon-purple">
+                            <IconTarget size={20} stroke={1.5} />
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-value">{attendanceStats.onTimeRate}<span class="stat-unit">%</span></span>
+                            <span class="stat-label">On-Time Rate</span>
+                        </div>
+                        <div class="stat-meta">
+                            <IconCheck size={12} stroke={1.5} />
+                            <span>Avg: {attendanceStats.avgCheckIn || '--:--'}</span>
+                        </div>
+                    </div>
                 </div>
             </section>
 
+            <!-- Weekly Chart Section -->
+            <section class="chart-section apple-animate-in">
+                <div class="chart-card">
+                    <div class="section-header">
+                        <div>
+                            <h3 class="section-title">Weekly Overview</h3>
+                            <p class="section-subtitle">Hours worked per day</p>
+                        </div>
+                        <div class="chart-legend">
+                            <span class="legend-item"><span class="legend-dot legend-dot-active"></span>Completed</span>
+                            <span class="legend-item"><span class="legend-dot legend-dot-today"></span>Today</span>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        {#each attendanceStats.weeklyData as day}
+                            <div class="chart-bar-wrapper">
+                                <div class="chart-bar-value">{day.hours > 0 ? formatHoursShort(day.hours) : '-'}</div>
+                                <div class="chart-bar-track">
+                                    <div 
+                                        class="chart-bar" 
+                                        class:chart-bar-today={day.isToday}
+                                        class:chart-bar-empty={!day.hasRecord}
+                                        style="height: {day.hours > 0 ? (day.hours / maxChartHours) * 100 : 5}%"
+                                    ></div>
+                                </div>
+                                <div class="chart-bar-label" class:label-today={day.isToday}>{day.day}</div>
+                            </div>
+                        {/each}
+                    </div>
+                    <div class="chart-footer">
+                        <div class="chart-stat">
+                            <span class="chart-stat-label">Week Total</span>
+                            <span class="chart-stat-value">{attendanceStats.weekHours}h</span>
+                        </div>
+                        <div class="chart-stat">
+                            <span class="chart-stat-label">Daily Avg</span>
+                            <span class="chart-stat-value">{attendanceStats.avgDailyHours}h</span>
+                        </div>
+                        <div class="chart-stat">
+                            <span class="chart-stat-label">Best Streak</span>
+                            <span class="chart-stat-value">{attendanceStats.bestStreak} days</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Insights & Activity Row -->
             <div class="two-column apple-animate-in">
+                <!-- Insights Panel -->
+                {#if insights.length > 0}
+                <section class="insights-section">
+                    <div class="section-header">
+                        <h3 class="section-title">
+                            <IconZap size={18} stroke={1.5} />
+                            Quick Insights
+                        </h3>
+                    </div>
+                    <div class="insights-list">
+                        {#each insights as insight}
+                            <div class="insight-item insight-{insight.color}">
+                                <div class="insight-icon">
+                                    <svelte:component this={insight.icon} size={16} stroke={2} />
+                                </div>
+                                <span class="insight-text">{insight.text}</span>
+                            </div>
+                        {/each}
+                    </div>
+                </section>
+                {/if}
+
+                <!-- Recent Activity -->
                 <section class="activity-section">
                     <div class="section-header">
                         <h3 class="section-title">Recent Activity</h3>
-                        {#if allRecentActivity.length > 4}
-                            <button class="see-all-link" on:click={openActivityModal}>See All ({allRecentActivity.length})<IconChevronRight size={16} stroke={2} /></button>
+                        {#if allRecentActivity.length > 5}
+                            <button class="see-all-link" on:click={openActivityModal}>
+                                See All ({allRecentActivity.length})
+                                <IconChevronRight size={16} stroke={2} />
+                            </button>
                         {:else}
-                            <a href="/app/history" class="see-all-link">See All<IconChevronRight size={16} stroke={2} /></a>
+                            <a href="/app/history" class="see-all-link">
+                                See All
+                                <IconChevronRight size={16} stroke={2} />
+                            </a>
                         {/if}
                     </div>
                     <div class="activity-list">
@@ -311,31 +568,54 @@
                                 <div class="activity-item">
                                     <div class="activity-dot activity-dot-{getStatusColor(activity.status)}"></div>
                                     <div class="activity-content">
-                                        <div class="activity-main"><span class="activity-date">{activity.date}</span><span class="activity-status status-text-{getStatusColor(activity.status)}">{getStatusText(activity.status)}</span></div>
+                                        <div class="activity-main">
+                                            <span class="activity-date">{activity.date}</span>
+                                            <span class="activity-hours">{activity.hours > 0 ? formatHoursShort(activity.hours) : '-'}</span>
+                                        </div>
                                         <div class="activity-details">
-                                            {#if activity.checkIn}<span class="activity-time"><IconClock size={12} stroke={1.5} />{format(new Date(activity.checkIn), 'h:mm a')}{#if activity.checkOut} → {format(new Date(activity.checkOut), 'h:mm a')}{/if}</span>{/if}
-                                            {#if activity.location}<span class="activity-location"><IconMapPin size={12} stroke={1.5} />{activity.location.split(',')[0]}</span>{/if}
+                                            {#if activity.checkIn}
+                                                <span class="activity-time">
+                                                    <IconClock size={12} stroke={1.5} />
+                                                    {format(new Date(activity.checkIn), 'h:mm a')}
+                                                    {#if activity.checkOut} → {format(new Date(activity.checkOut), 'h:mm a')}{/if}
+                                                </span>
+                                            {/if}
                                         </div>
                                     </div>
                                 </div>
                             {/each}
-                        {:else}<div class="empty-activity"><IconCalendarStats size={32} stroke={1.5} /><p>No recent activity</p></div>{/if}
-                    </div>
-                </section>
-                <section class="profile-section">
-                    <div class="section-header"><h3 class="section-title">Your Profile</h3><a href="/app/profile" class="see-all-link">Edit<IconChevronRight size={16} stroke={2} /></a></div>
-                    <div class="profile-card-content">
-                        <div class="profile-avatar-large">{#if auth.currentUser?.photoURL}<img src={auth.currentUser.photoURL} alt="Profile" />{:else}<span>{userProfile.name.charAt(0)}</span>{/if}</div>
-                        <h4 class="profile-name">{userProfile.name}</h4>
-                        <p class="profile-email">{userProfile.email}</p>
-                        <div class="profile-info-grid">
-                            <div class="profile-info-item"><span class="info-label">Year</span><span class="info-value">{userProfile.year}</span></div>
-                            <div class="profile-info-item"><span class="info-label">Department</span><span class="info-value">{userProfile.departmentOrCourse}</span></div>
-                            <div class="profile-info-item"><span class="info-label">Section</span><span class="info-value">{userProfile.section}</span></div>
-                        </div>
+                        {:else}
+                            <div class="empty-activity">
+                                <IconCalendarStats size={32} stroke={1.5} />
+                                <p>No recent activity</p>
+                            </div>
+                        {/if}
                     </div>
                 </section>
             </div>
+
+            <!-- Profile Summary -->
+            <section class="profile-summary apple-animate-in">
+                <div class="profile-card-compact">
+                    <div class="profile-left">
+                        <div class="profile-avatar-sm">
+                            {#if auth.currentUser?.photoURL}
+                                <img src={auth.currentUser.photoURL} alt="Profile" />
+                            {:else}
+                                <span>{userProfile.name.charAt(0)}</span>
+                            {/if}
+                        </div>
+                        <div class="profile-info-compact">
+                            <h4 class="profile-name-sm">{userProfile.name}</h4>
+                            <p class="profile-meta">{userProfile.departmentOrCourse} • {userProfile.section}</p>
+                        </div>
+                    </div>
+                    <a href="/app/profile" class="profile-edit-btn">
+                        <span>View Profile</span>
+                        <IconChevronRight size={16} stroke={2} />
+                    </a>
+                </div>
+            </section>
 
             <!-- Christmas Daily Reward -->
             {#if $activeHoliday?.id === 'christmas' && $seasonalPrefs.enabled}
@@ -347,82 +627,111 @@
                 </section>
             {/if}
 
-            <!-- Recent Activity Modal -->
-            {#if showActivityModal}
-                <div class="modal-overlay" on:click={closeActivityModal} on:keydown={handleModalKeydown} role="dialog" aria-modal="true" aria-labelledby="modal-title">
-                    <div class="modal-container" on:click|stopPropagation role="document">
-                        <div class="modal-header">
-                            <h2 id="modal-title" class="modal-title">
-                                <IconActivity size={22} stroke={1.5} />
-                                Recent Activity
-                            </h2>
-                            <button class="modal-close" on:click={closeActivityModal} aria-label="Close modal">
-                                <IconX size={20} stroke={2} />
-                            </button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="modal-activity-list">
-                                {#each allRecentActivity as activity, i}
-                                    <div class="modal-activity-item" style="animation-delay: {i * 30}ms">
-                                        <div class="activity-dot activity-dot-{getStatusColor(activity.status)}"></div>
-                                        <div class="activity-content">
-                                            <div class="activity-main">
-                                                <span class="activity-date">{activity.date}</span>
-                                                <span class="activity-status status-text-{getStatusColor(activity.status)}">{getStatusText(activity.status)}</span>
-                                            </div>
-                                            <div class="activity-details">
-                                                {#if activity.checkIn}
-                                                    <span class="activity-time">
-                                                        <IconClock size={12} stroke={1.5} />
-                                                        {format(new Date(activity.checkIn), 'h:mm a')}
-                                                        {#if activity.checkOut} → {format(new Date(activity.checkOut), 'h:mm a')}{/if}
-                                                    </span>
-                                                {/if}
-                                                {#if activity.location}
-                                                    <span class="activity-location">
-                                                        <IconMapPin size={12} stroke={1.5} />
-                                                        {activity.location.split(',')[0]}
-                                                    </span>
-                                                {/if}
-                                            </div>
-                                        </div>
-                                    </div>
-                                {/each}
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <a href="/app/history" class="modal-view-all">
-                                View Full History
-                                <IconArrowRight size={16} stroke={2} />
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            {/if}
-
+            <!-- Quick Actions -->
             <section class="actions-section apple-animate-in">
-                <div class="section-header"><h3 class="section-title">Quick Actions</h3></div>
+                <div class="section-header">
+                    <h3 class="section-title">Quick Actions</h3>
+                </div>
                 <div class="actions-grid">
-                    <a href="/app/attendance" class="action-card action-primary"><div class="action-icon"><IconUserCheck size={24} stroke={1.5} /></div><div class="action-text"><span class="action-title">Check In/Out</span><span class="action-desc">Record your attendance</span></div><IconArrowRight size={20} stroke={2} class="action-arrow" /></a>
-                    <a href="/app/history" class="action-card"><div class="action-icon"><IconChartBar size={24} stroke={1.5} /></div><div class="action-text"><span class="action-title">View History</span><span class="action-desc">See all records</span></div><IconArrowRight size={20} stroke={2} class="action-arrow" /></a>
-                    <a href="/app/analytics" class="action-card"><div class="action-icon"><IconActivity size={24} stroke={1.5} /></div><div class="action-text"><span class="action-title">Analytics</span><span class="action-desc">View your insights</span></div><IconArrowRight size={20} stroke={2} class="action-arrow" /></a>
+                    <a href="/app/attendance" class="action-card action-primary">
+                        <div class="action-icon">
+                            <IconUserCheck size={22} stroke={1.5} />
+                        </div>
+                        <div class="action-text">
+                            <span class="action-title">Check In/Out</span>
+                            <span class="action-desc">Record attendance</span>
+                        </div>
+                        <IconArrowRight size={18} stroke={2} class="action-arrow" />
+                    </a>
+                    <a href="/app/history" class="action-card">
+                        <div class="action-icon">
+                            <IconChartBar size={22} stroke={1.5} />
+                        </div>
+                        <div class="action-text">
+                            <span class="action-title">History</span>
+                            <span class="action-desc">View all records</span>
+                        </div>
+                        <IconArrowRight size={18} stroke={2} class="action-arrow" />
+                    </a>
+                    <a href="/app/analytics" class="action-card">
+                        <div class="action-icon">
+                            <IconChartPie size={22} stroke={1.5} />
+                        </div>
+                        <div class="action-text">
+                            <span class="action-title">Analytics</span>
+                            <span class="action-desc">View insights</span>
+                        </div>
+                        <IconArrowRight size={18} stroke={2} class="action-arrow" />
+                    </a>
                 </div>
             </section>
+        </div>
+    {/if}
+
+    <!-- Activity Modal -->
+    {#if showActivityModal}
+        <div class="modal-overlay" on:click={closeActivityModal} on:keydown={handleModalKeydown} role="dialog" aria-modal="true">
+            <div class="modal-container" on:click|stopPropagation role="document">
+                <div class="modal-header">
+                    <h2 class="modal-title">
+                        <IconActivity size={20} stroke={1.5} />
+                        Recent Activity
+                    </h2>
+                    <button class="modal-close" on:click={closeActivityModal} aria-label="Close">
+                        <IconX size={18} stroke={2} />
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="modal-activity-list">
+                        {#each allRecentActivity as activity, i}
+                            <div class="modal-activity-item" style="animation-delay: {i * 20}ms">
+                                <div class="activity-dot activity-dot-{getStatusColor(activity.status)}"></div>
+                                <div class="activity-content">
+                                    <div class="activity-main">
+                                        <span class="activity-date">{activity.date}</span>
+                                        <span class="activity-hours">{activity.hours > 0 ? formatHoursShort(activity.hours) : '-'}</span>
+                                    </div>
+                                    <div class="activity-details">
+                                        {#if activity.checkIn}
+                                            <span class="activity-time">
+                                                <IconClock size={12} stroke={1.5} />
+                                                {format(new Date(activity.checkIn), 'h:mm a')}
+                                                {#if activity.checkOut} → {format(new Date(activity.checkOut), 'h:mm a')}{/if}
+                                            </span>
+                                        {/if}
+                                        {#if activity.location}
+                                            <span class="activity-location">
+                                                <IconMapPin size={12} stroke={1.5} />
+                                                {activity.location.split(',')[0]}
+                                            </span>
+                                        {/if}
+                                    </div>
+                                </div>
+                            </div>
+                        {/each}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <a href="/app/history" class="modal-view-all">
+                        View Full History
+                        <IconArrowRight size={16} stroke={2} />
+                    </a>
+                </div>
+            </div>
         </div>
     {/if}
 </div>
 
 
 <style>
+/* Dashboard Page */
 .dashboard-page { 
     min-height: 100%; 
     padding: clamp(16px, 4vw, 32px); 
     background: linear-gradient(180deg, #f0f2ff 0%, #f5f5f7 50%, #f0fff4 100%);
     position: relative;
-    overflow-x: hidden;
 }
 
-/* Visible Background Droplets */
 .dashboard-page::before {
     content: '';
     position: fixed;
@@ -431,316 +740,226 @@
     right: 0;
     bottom: 0;
     background: 
-        radial-gradient(ellipse 600px 400px at 10% 15%, rgba(102, 126, 234, 0.12) 0%, transparent 50%),
-        radial-gradient(ellipse 500px 350px at 90% 20%, rgba(118, 75, 162, 0.1) 0%, transparent 50%),
-        radial-gradient(ellipse 450px 300px at 75% 85%, rgba(52, 199, 89, 0.08) 0%, transparent 50%),
-        radial-gradient(ellipse 400px 400px at 20% 80%, rgba(0, 122, 255, 0.1) 0%, transparent 50%),
-        radial-gradient(ellipse 350px 350px at 50% 50%, rgba(175, 82, 222, 0.06) 0%, transparent 50%);
+        radial-gradient(ellipse 600px 400px at 10% 15%, rgba(102, 126, 234, 0.1) 0%, transparent 50%),
+        radial-gradient(ellipse 500px 350px at 90% 20%, rgba(118, 75, 162, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse 450px 300px at 75% 85%, rgba(52, 199, 89, 0.06) 0%, transparent 50%);
     pointer-events: none;
     z-index: 0;
 }
 
-/* Floating Soft Blobs */
-.dashboard-page::after {
-    content: '';
-    position: fixed;
-    width: 400px;
-    height: 400px;
-    top: 5%;
-    right: -150px;
-    background: radial-gradient(circle, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.08) 40%, transparent 70%);
-    border-radius: 50%;
-    filter: blur(60px);
-    animation: float-blob 20s ease-in-out infinite;
-    pointer-events: none;
-    z-index: 0;
-}
-
-@keyframes float-blob {
-    0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.8; }
-    33% { transform: translate(-60px, 40px) scale(1.15); opacity: 1; }
-    66% { transform: translate(40px, -30px) scale(0.9); opacity: 0.7; }
-}
-
-.dashboard-content { max-width: 1200px; margin: 0 auto; position: relative; z-index: 1; }
-.loading-container { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; position: relative; z-index: 1; }
+.dashboard-content { max-width: 1100px; margin: 0 auto; position: relative; z-index: 1; }
+.loading-container { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; }
 .loading-text { margin-top: 16px; font-size: 15px; color: var(--apple-gray-1); }
-.dashboard-content { max-width: 1200px; margin: 0 auto; }
-.hero-section { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: var(--apple-radius-xl); padding: clamp(18px, 3vw, 24px); margin-bottom: 16px; color: white; position: relative; overflow: hidden; }
-.hero-section::before { content: ''; position: absolute; top: -50%; right: -20%; width: 60%; height: 200%; background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%); pointer-events: none; }
 
-/* Particles Container */
+/* Hero Section */
+.hero-section { 
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+    border-radius: var(--apple-radius-xl); 
+    padding: clamp(20px, 4vw, 28px); 
+    margin-bottom: 16px; 
+    color: white; 
+    position: relative; 
+    overflow: hidden; 
+}
+
 .particles-container { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-
-/* Floating Particles - Small Droplets */
-.particle { position: absolute; border-radius: 50%; background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(2px); animation: float-particle 15s infinite ease-in-out; }
-.particle-1 { width: 8px; height: 8px; top: 20%; left: 10%; animation-delay: 0s; animation-duration: 12s; }
-.particle-2 { width: 12px; height: 12px; top: 60%; left: 20%; animation-delay: -2s; animation-duration: 18s; }
-.particle-3 { width: 6px; height: 6px; top: 30%; left: 70%; animation-delay: -4s; animation-duration: 14s; }
-.particle-4 { width: 10px; height: 10px; top: 70%; left: 80%; animation-delay: -6s; animation-duration: 16s; }
-.particle-5 { width: 5px; height: 5px; top: 15%; left: 50%; animation-delay: -8s; animation-duration: 20s; }
-.particle-6 { width: 14px; height: 14px; top: 80%; left: 40%; animation-delay: -3s; animation-duration: 22s; }
-.particle-7 { width: 7px; height: 7px; top: 45%; left: 90%; animation-delay: -5s; animation-duration: 13s; }
-.particle-8 { width: 9px; height: 9px; top: 55%; left: 5%; animation-delay: -7s; animation-duration: 17s; }
+.particle { position: absolute; border-radius: 50%; background: rgba(255, 255, 255, 0.12); animation: float-particle 15s infinite ease-in-out; }
+.particle-1 { width: 8px; height: 8px; top: 20%; left: 10%; animation-delay: 0s; }
+.particle-2 { width: 12px; height: 12px; top: 60%; left: 20%; animation-delay: -3s; }
+.particle-3 { width: 6px; height: 6px; top: 30%; left: 70%; animation-delay: -6s; }
+.particle-4 { width: 10px; height: 10px; top: 70%; left: 85%; animation-delay: -9s; }
+.orb { position: absolute; border-radius: 50%; background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.2), transparent 70%); animation: float-orb 20s infinite ease-in-out; }
+.orb-1 { width: 60px; height: 60px; top: 10%; right: 15%; }
+.orb-2 { width: 40px; height: 40px; bottom: 20%; left: 25%; animation-delay: -10s; }
 
 @keyframes float-particle {
-    0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.3; }
-    25% { transform: translate(30px, -40px) scale(1.2); opacity: 0.6; }
-    50% { transform: translate(-20px, -80px) scale(0.8); opacity: 0.4; }
-    75% { transform: translate(40px, -40px) scale(1.1); opacity: 0.5; }
+    0%, 100% { transform: translate(0, 0); opacity: 0.3; }
+    50% { transform: translate(20px, -30px); opacity: 0.6; }
 }
-
-/* Glowing Orbs */
-.orb { position: absolute; border-radius: 50%; background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.1) 50%, transparent 70%); animation: float-orb 20s infinite ease-in-out; filter: blur(1px); }
-.orb-1 { width: 60px; height: 60px; top: 10%; right: 15%; animation-delay: 0s; }
-.orb-2 { width: 40px; height: 40px; bottom: 20%; left: 25%; animation-delay: -5s; animation-duration: 25s; }
-.orb-3 { width: 30px; height: 30px; top: 50%; right: 30%; animation-delay: -10s; animation-duration: 18s; }
-
 @keyframes float-orb {
     0%, 100% { transform: translate(0, 0) rotate(0deg); opacity: 0.3; }
-    33% { transform: translate(50px, -30px) rotate(120deg); opacity: 0.5; }
-    66% { transform: translate(-30px, 20px) rotate(240deg); opacity: 0.4; }
+    50% { transform: translate(30px, -20px) rotate(180deg); opacity: 0.5; }
 }
 
-/* Pulsing Glow Rings */
-.glow-ring { position: absolute; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.1); animation: pulse-ring 8s infinite ease-out; }
-.glow-ring-1 { width: 150px; height: 150px; top: -30px; right: -30px; animation-delay: 0s; }
-.glow-ring-2 { width: 100px; height: 100px; bottom: -20px; left: 10%; animation-delay: -4s; }
-
-@keyframes pulse-ring {
-    0% { transform: scale(0.8); opacity: 0; border-width: 3px; }
-    50% { opacity: 0.3; }
-    100% { transform: scale(1.5); opacity: 0; border-width: 1px; }
-}
-
-/* Shimmer Effect on Hero */
-.hero-section::after { content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent); animation: shimmer 8s infinite; pointer-events: none; }
-@keyframes shimmer { 0% { left: -100%; } 100% { left: 200%; } }
 .hero-content { display: flex; justify-content: space-between; align-items: flex-start; position: relative; z-index: 1; }
-.greeting-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.greeting-label { font-size: 12px; font-weight: 500; opacity: 0.9; }
+.greeting-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.greeting-label { font-size: 13px; font-weight: 500; opacity: 0.9; }
 :global(.greeting-icon) { color: #FFD93D; }
-.greeting-row { margin-bottom: 4px; }
-.name-with-badges { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.hero-title { font-size: clamp(26px, 5vw, 34px); font-weight: 700; letter-spacing: -0.5px; margin-bottom: 2px; }
+.name-with-badges { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hero-title { font-size: clamp(26px, 5vw, 32px); font-weight: 700; letter-spacing: -0.5px; margin-bottom: 2px; }
 .hero-subtitle { font-size: 13px; opacity: 0.85; }
-
-/* Floating Badges */
-.floating-badges { display: flex; gap: 8px; align-items: center; animation: badges-float 3s ease-in-out infinite; }
+.floating-badges { display: flex; gap: 6px; }
 .floating-badge { 
-    width: 36px; 
-    height: 36px; 
-    border-radius: 50%; 
-    background: rgba(255, 255, 255, 0.25); 
-    backdrop-filter: blur(10px); 
-    -webkit-backdrop-filter: blur(10px);
-    border: 2px solid rgba(255, 255, 255, 0.4);
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
-    cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
-    position: relative;
+    width: 32px; height: 32px; border-radius: 50%; 
+    background: rgba(255, 255, 255, 0.2); 
+    backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center; 
+    transition: transform 0.2s ease;
 }
-.floating-badge:hover { 
-    transform: scale(1.2) translateY(-4px); 
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.4);
-    background: rgba(255, 255, 255, 0.35);
-}
-.floating-badge::after {
-    content: '';
-    position: absolute;
-    inset: -3px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, rgba(255,255,255,0.4), transparent);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    z-index: -1;
-}
-.floating-badge:hover::after { opacity: 1; }
-.badge-icon { font-size: 18px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2)); }
-@keyframes badges-float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-4px); }
-}
+.floating-badge:hover { transform: scale(1.15); }
+.badge-icon { font-size: 16px; }
 .hero-time { text-align: right; }
-.time-display { font-size: clamp(32px, 6vw, 44px); font-weight: 700; letter-spacing: -1px; line-height: 1; }
+.time-display { font-size: clamp(32px, 6vw, 42px); font-weight: 700; letter-spacing: -1px; line-height: 1; }
 .time-period { font-size: 14px; font-weight: 500; opacity: 0.8; margin-left: 2px; }
-.quick-status { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.2); position: relative; z-index: 1; flex-wrap: wrap; }
-.status-indicator { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 16px; font-size: 12px; font-weight: 600; }
-.checkin-time { font-size: 12px; }
-.status-green { background: rgba(52, 199, 89, 0.2); color: #7FFF9B; }
-.status-yellow { background: rgba(255, 204, 0, 0.2); color: #FFE066; }
+.quick-status { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.2); flex-wrap: wrap; }
+.status-indicator { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 14px; font-size: 12px; font-weight: 600; }
+.status-green { background: rgba(52, 199, 89, 0.25); color: #7FFF9B; }
+.status-yellow { background: rgba(255, 204, 0, 0.25); color: #FFE066; }
 .status-gray { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.9); }
-.checkin-time { display: flex; align-items: center; gap: 6px; font-size: 13px; opacity: 0.85; }
-.progress-section { margin-bottom: 20px; }
-.progress-card { background: var(--apple-white); border-radius: var(--apple-radius-xl); padding: clamp(20px, 4vw, 28px); box-shadow: var(--apple-shadow-sm); }
-.progress-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
-.progress-title { font-size: 17px; font-weight: 600; color: var(--apple-black); margin-bottom: 4px; }
-.progress-subtitle { font-size: 13px; color: var(--apple-gray-1); }
+.checkin-time { display: flex; align-items: center; gap: 5px; font-size: 12px; opacity: 0.85; }
+
+/* Progress Section */
+.progress-section { margin-bottom: 16px; }
+.progress-card { background: var(--apple-white); border-radius: var(--apple-radius-xl); padding: clamp(18px, 4vw, 24px); box-shadow: var(--apple-shadow-sm); }
+.progress-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+.progress-title { font-size: 16px; font-weight: 600; color: var(--apple-black); margin-bottom: 2px; }
+.progress-subtitle { font-size: 12px; color: var(--apple-gray-1); }
 .progress-value { text-align: right; }
-.hours-worked { font-size: 24px; font-weight: 700; color: var(--apple-black); }
-.hours-target { font-size: 13px; color: var(--apple-gray-1); margin-left: 4px; }
-.progress-bar-container { height: 8px; background: var(--apple-gray-5); border-radius: 4px; overflow: hidden; margin-bottom: 16px; }
+.hours-worked { font-size: 22px; font-weight: 700; color: var(--apple-black); }
+.hours-target { font-size: 12px; color: var(--apple-gray-1); margin-left: 4px; }
+.progress-bar-container { height: 8px; background: var(--apple-gray-5); border-radius: 4px; overflow: hidden; margin-bottom: 14px; }
 .progress-bar { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 4px; transition: width 0.5s ease; }
 .progress-footer { display: flex; justify-content: space-between; align-items: center; }
-.progress-percent { font-size: 13px; color: var(--apple-gray-1); }
-.view-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--apple-accent); text-decoration: none; transition: var(--apple-transition); }
-.view-btn:hover { gap: 10px; }
+.progress-percent { font-size: 12px; color: var(--apple-gray-1); }
+.view-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; color: var(--apple-accent); text-decoration: none; transition: gap 0.2s ease; }
+.view-btn:hover { gap: 8px; }
+
+/* Stats Section */
 .stats-section { margin-bottom: 16px; }
-.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
-
-/* Card 1 - Blue tint */
-.stat-card:nth-child(1) { background: linear-gradient(145deg, rgba(240, 245, 255, 0.95) 0%, rgba(230, 240, 255, 0.85) 100%); border: 1px solid rgba(0, 122, 255, 0.12); }
-/* Card 2 - Green tint */
-.stat-card:nth-child(2) { background: linear-gradient(145deg, rgba(240, 255, 245, 0.95) 0%, rgba(230, 255, 240, 0.85) 100%); border: 1px solid rgba(52, 199, 89, 0.12); }
-/* Card 3 - Orange tint */
-.stat-card:nth-child(3) { background: linear-gradient(145deg, rgba(255, 248, 240, 0.95) 0%, rgba(255, 243, 230, 0.85) 100%); border: 1px solid rgba(255, 149, 0, 0.12); }
-/* Card 4 - Purple tint */
-.stat-card:nth-child(4) { background: linear-gradient(145deg, rgba(248, 240, 255, 0.95) 0%, rgba(243, 230, 255, 0.85) 100%); border: 1px solid rgba(175, 82, 222, 0.12); }
-
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .stat-card { 
-    backdrop-filter: blur(20px); 
-    -webkit-backdrop-filter: blur(20px);
+    background: var(--apple-white); 
     border-radius: var(--apple-radius-lg); 
-    padding: 16px; 
-    box-shadow: 0 4px 20px rgba(0,0,0,0.04), 0 8px 32px rgba(102, 126, 234, 0.06); 
+    padding: 14px; 
+    box-shadow: var(--apple-shadow-sm); 
     display: flex; 
     flex-direction: column; 
-    gap: 10px; 
-    transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1); 
-    position: relative;
-    overflow: hidden;
+    gap: 8px; 
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-.stat-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, transparent 10%, rgba(102, 126, 234, 0.3) 50%, transparent 90%);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-.stat-card:hover::before { opacity: 1; }
-.stat-card:hover { 
-    transform: translateY(-4px) scale(1.02); 
-    box-shadow: 0 12px 40px rgba(102, 126, 234, 0.12), 0 4px 12px rgba(0,0,0,0.06); 
-}
-.stat-card:active { transform: translateY(-2px) scale(1.01); }
-.stat-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; transition: transform 0.3s ease; }
-.stat-card:hover .stat-icon { transform: scale(1.1) rotate(5deg); }
-.stat-icon-blue { background: linear-gradient(135deg, rgba(0, 122, 255, 0.2), rgba(0, 122, 255, 0.08)); color: var(--apple-accent); box-shadow: 0 3px 10px rgba(0, 122, 255, 0.25); }
-.stat-icon-green { background: linear-gradient(135deg, rgba(52, 199, 89, 0.2), rgba(52, 199, 89, 0.08)); color: var(--apple-green); box-shadow: 0 3px 10px rgba(52, 199, 89, 0.25); }
-.stat-icon-orange { background: linear-gradient(135deg, rgba(255, 149, 0, 0.2), rgba(255, 149, 0, 0.08)); color: var(--apple-orange); box-shadow: 0 3px 10px rgba(255, 149, 0, 0.25); }
-.stat-icon-purple { background: linear-gradient(135deg, rgba(175, 82, 222, 0.2), rgba(175, 82, 222, 0.08)); color: var(--apple-purple); box-shadow: 0 3px 10px rgba(175, 82, 222, 0.25); }
+.stat-card:hover { transform: translateY(-2px); box-shadow: var(--apple-shadow-md); }
+.stat-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+.stat-icon-blue { background: rgba(0, 122, 255, 0.12); color: var(--apple-accent); }
+.stat-icon-green { background: rgba(52, 199, 89, 0.12); color: var(--apple-green); }
+.stat-icon-orange { background: rgba(255, 149, 0, 0.12); color: var(--apple-orange); }
+.stat-icon-purple { background: rgba(175, 82, 222, 0.12); color: var(--apple-purple); }
 .stat-content { display: flex; flex-direction: column; gap: 2px; }
-.stat-value { font-size: 24px; font-weight: 700; color: var(--apple-black); line-height: 1; }
-.stat-unit { font-size: 12px; font-weight: 500; color: var(--apple-gray-1); margin-left: 3px; }
+.stat-value { font-size: 22px; font-weight: 700; color: var(--apple-black); line-height: 1; }
+.stat-unit { font-size: 11px; font-weight: 500; color: var(--apple-gray-1); margin-left: 2px; }
 .stat-label { font-size: 11px; color: var(--apple-gray-1); font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; }
-.stat-progress { display: flex; flex-direction: column; gap: 4px; margin-top: auto; }
-.mini-progress { height: 3px; background: rgba(0,0,0,0.06); border-radius: 2px; overflow: hidden; }
-.mini-progress-bar { height: 100%; background: linear-gradient(90deg, var(--apple-accent), #5856D6); border-radius: 2px; transition: width 0.6s cubic-bezier(0.25, 0.1, 0.25, 1); }
-.stat-target { font-size: 10px; color: var(--apple-gray-2); }
-.stat-meta { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--apple-gray-2); margin-top: auto; padding-top: 6px; border-top: 1px solid rgba(0,0,0,0.04); }
+.stat-trend { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; margin-top: auto; }
+.trend-green { color: var(--apple-green); }
+.trend-red { color: var(--apple-red); }
+.trend-gray { color: var(--apple-gray-2); }
+.stat-meta { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--apple-gray-2); margin-top: auto; }
 .stat-badge { margin-top: auto; }
-.badge { display: inline-block; padding: 3px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; backdrop-filter: blur(4px); }
-.badge-gold { background: linear-gradient(135deg, rgba(255, 204, 0, 0.2), rgba(255, 149, 0, 0.1)); color: #B38F00; box-shadow: 0 2px 6px rgba(255, 204, 0, 0.2); }
-.badge-silver { background: linear-gradient(135deg, rgba(0, 122, 255, 0.15), rgba(88, 86, 214, 0.1)); color: var(--apple-accent); box-shadow: 0 2px 6px rgba(0, 122, 255, 0.15); }
+.badge { display: inline-block; padding: 3px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+.badge-gold { background: rgba(255, 204, 0, 0.15); color: #B38F00; }
+.badge-silver { background: rgba(0, 122, 255, 0.12); color: var(--apple-accent); }
 .badge-bronze { background: rgba(0,0,0,0.04); color: var(--apple-gray-1); }
-.two-column { display: grid; grid-template-columns: 1fr; gap: 20px; margin-bottom: 20px; }
-.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.section-title { font-size: 17px; font-weight: 600; color: var(--apple-black); }
-.see-all-link { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; color: var(--apple-accent); text-decoration: none; transition: var(--apple-transition); }
-.see-all-link:hover { gap: 8px; }
-.activity-section { background: var(--apple-white); border-radius: var(--apple-radius-xl); padding: 20px; box-shadow: var(--apple-shadow-sm); }
+
+/* Chart Section */
+.chart-section { margin-bottom: 16px; }
+.chart-card { background: var(--apple-white); border-radius: var(--apple-radius-xl); padding: clamp(18px, 4vw, 24px); box-shadow: var(--apple-shadow-sm); }
+.section-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+.section-title { font-size: 16px; font-weight: 600; color: var(--apple-black); display: flex; align-items: center; gap: 6px; }
+.section-subtitle { font-size: 12px; color: var(--apple-gray-1); margin-top: 2px; }
+.chart-legend { display: flex; gap: 12px; }
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--apple-gray-1); }
+.legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+.legend-dot-active { background: linear-gradient(135deg, #667eea, #764ba2); }
+.legend-dot-today { background: var(--apple-accent); }
+.chart-container { display: flex; justify-content: space-between; align-items: flex-end; height: 140px; gap: 8px; padding: 0 4px; }
+.chart-bar-wrapper { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 6px; }
+.chart-bar-value { font-size: 10px; font-weight: 600; color: var(--apple-gray-1); height: 16px; }
+.chart-bar-track { width: 100%; max-width: 40px; height: 100px; background: var(--apple-gray-6); border-radius: 6px; display: flex; align-items: flex-end; overflow: hidden; }
+.chart-bar { width: 100%; background: linear-gradient(180deg, #667eea, #764ba2); border-radius: 6px; transition: height 0.5s cubic-bezier(0.25, 0.1, 0.25, 1); min-height: 4px; }
+.chart-bar-today { background: linear-gradient(180deg, var(--apple-accent), #5856D6); }
+.chart-bar-empty { background: var(--apple-gray-4); opacity: 0.5; }
+.chart-bar-label { font-size: 11px; font-weight: 500; color: var(--apple-gray-1); }
+.label-today { color: var(--apple-accent); font-weight: 600; }
+.chart-footer { display: flex; justify-content: space-around; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--apple-gray-5); }
+.chart-stat { text-align: center; }
+.chart-stat-label { display: block; font-size: 11px; color: var(--apple-gray-1); margin-bottom: 2px; }
+.chart-stat-value { font-size: 15px; font-weight: 700; color: var(--apple-black); }
+
+/* Two Column Layout */
+.two-column { display: grid; grid-template-columns: 1fr 1.5fr; gap: 16px; margin-bottom: 16px; }
+
+/* Insights Section */
+.insights-section { background: var(--apple-white); border-radius: var(--apple-radius-xl); padding: 18px; box-shadow: var(--apple-shadow-sm); }
+.insights-list { display: flex; flex-direction: column; gap: 10px; }
+.insight-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--apple-radius-md); transition: transform 0.2s ease; }
+.insight-item:hover { transform: translateX(4px); }
+.insight-green { background: rgba(52, 199, 89, 0.08); }
+.insight-orange { background: rgba(255, 149, 0, 0.08); }
+.insight-blue { background: rgba(0, 122, 255, 0.08); }
+.insight-icon { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.insight-green .insight-icon { background: rgba(52, 199, 89, 0.15); color: var(--apple-green); }
+.insight-orange .insight-icon { background: rgba(255, 149, 0, 0.15); color: var(--apple-orange); }
+.insight-blue .insight-icon { background: rgba(0, 122, 255, 0.15); color: var(--apple-accent); }
+.insight-text { font-size: 13px; font-weight: 500; color: var(--apple-black); }
+
+/* Activity Section */
+.activity-section { background: var(--apple-white); border-radius: var(--apple-radius-xl); padding: 18px; box-shadow: var(--apple-shadow-sm); }
+.see-all-link { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; color: var(--apple-accent); text-decoration: none; background: none; border: none; cursor: pointer; transition: gap 0.2s ease; }
+.see-all-link:hover { gap: 6px; }
 .activity-list { display: flex; flex-direction: column; }
-.activity-item { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--apple-gray-5); }
+.activity-item { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--apple-gray-5); }
 .activity-item:last-child { border-bottom: none; }
-.activity-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+.activity-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
 .activity-dot-green { background: var(--apple-green); }
 .activity-dot-yellow { background: var(--apple-yellow); }
 .activity-dot-gray { background: var(--apple-gray-3); }
-.activity-content { flex: 1; }
-.activity-main { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.activity-date { font-size: 14px; font-weight: 600; color: var(--apple-black); }
-.activity-status { font-size: 12px; font-weight: 600; }
-.status-text-green { color: var(--apple-green); }
-.status-text-yellow { color: #B38F00; }
-.status-text-gray { color: var(--apple-gray-1); }
-.activity-details { display: flex; gap: 16px; flex-wrap: wrap; }
-.activity-time, .activity-location { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--apple-gray-1); }
-.empty-activity { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; color: var(--apple-gray-2); text-align: center; }
-.empty-activity p { margin-top: 12px; font-size: 14px; }
-.profile-section { background: var(--apple-white); border-radius: var(--apple-radius-xl); padding: 20px; box-shadow: var(--apple-shadow-sm); }
-.profile-card-content { text-align: center; }
-.profile-avatar-large { width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 16px; overflow: hidden; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3); }
-.profile-avatar-large img { width: 100%; height: 100%; object-fit: cover; }
-.profile-avatar-large span { font-size: 32px; font-weight: 600; color: white; }
-.profile-name { font-size: 18px; font-weight: 600; color: var(--apple-black); margin-bottom: 4px; }
-.profile-email { font-size: 13px; color: var(--apple-gray-1); margin-bottom: 20px; }
-.profile-info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; text-align: center; }
-.profile-info-item { background: var(--apple-gray-6); border-radius: var(--apple-radius-md); padding: 12px 8px; }
-.info-label { display: block; font-size: 11px; color: var(--apple-gray-1); margin-bottom: 4px; }
-.info-value { font-size: 13px; font-weight: 600; color: var(--apple-black); }
+.activity-content { flex: 1; min-width: 0; }
+.activity-main { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.activity-date { font-size: 13px; font-weight: 600; color: var(--apple-black); }
+.activity-hours { font-size: 12px; font-weight: 600; color: var(--apple-accent); }
+.activity-details { display: flex; gap: 12px; flex-wrap: wrap; }
+.activity-time, .activity-location { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--apple-gray-1); }
+.empty-activity { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px 20px; color: var(--apple-gray-2); text-align: center; }
+.empty-activity p { margin-top: 10px; font-size: 13px; }
+
+/* Profile Summary */
+.profile-summary { margin-bottom: 16px; }
+.profile-card-compact { background: var(--apple-white); border-radius: var(--apple-radius-xl); padding: 16px 20px; box-shadow: var(--apple-shadow-sm); display: flex; align-items: center; justify-content: space-between; }
+.profile-left { display: flex; align-items: center; gap: 14px; }
+.profile-avatar-sm { width: 48px; height: 48px; border-radius: 50%; overflow: hidden; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.profile-avatar-sm img { width: 100%; height: 100%; object-fit: cover; }
+.profile-avatar-sm span { font-size: 20px; font-weight: 600; color: white; }
+.profile-info-compact { min-width: 0; }
+.profile-name-sm { font-size: 15px; font-weight: 600; color: var(--apple-black); margin-bottom: 2px; }
+.profile-meta { font-size: 12px; color: var(--apple-gray-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.profile-edit-btn { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; color: var(--apple-accent); text-decoration: none; transition: gap 0.2s ease; }
+.profile-edit-btn:hover { gap: 6px; }
+
+/* Actions Section */
 .actions-section { margin-bottom: 20px; }
-.actions-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
-.action-card { display: flex; align-items: center; gap: 16px; background: var(--apple-white); border-radius: var(--apple-radius-lg); padding: 18px 20px; text-decoration: none; box-shadow: var(--apple-shadow-sm); transition: var(--apple-transition); }
+.actions-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.action-card { display: flex; align-items: center; gap: 14px; background: var(--apple-white); border-radius: var(--apple-radius-lg); padding: 16px 18px; text-decoration: none; box-shadow: var(--apple-shadow-sm); transition: transform 0.2s ease, box-shadow 0.2s ease; }
 .action-card:hover { transform: translateY(-2px); box-shadow: var(--apple-shadow-md); }
 .action-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
 .action-primary .action-icon { background: rgba(255,255,255,0.2); color: white; }
 .action-primary .action-desc { opacity: 0.85; }
-.action-icon { width: 48px; height: 48px; border-radius: 12px; background: var(--apple-gray-6); display: flex; align-items: center; justify-content: center; color: var(--apple-accent); flex-shrink: 0; }
-.action-text { flex: 1; }
-.action-title { display: block; font-size: 15px; font-weight: 600; color: var(--apple-black); margin-bottom: 2px; }
+.action-icon { width: 44px; height: 44px; border-radius: 12px; background: var(--apple-gray-6); display: flex; align-items: center; justify-content: center; color: var(--apple-accent); flex-shrink: 0; }
+.action-text { flex: 1; min-width: 0; }
+.action-title { display: block; font-size: 14px; font-weight: 600; color: var(--apple-black); margin-bottom: 2px; }
 .action-primary .action-title { color: white; }
-.action-desc { font-size: 12px; color: var(--apple-gray-1); }
-:global(.action-arrow) { color: var(--apple-gray-3); transition: var(--apple-transition); }
-.action-card:hover :global(.action-arrow) { transform: translateX(4px); color: var(--apple-accent); }
+.action-desc { font-size: 11px; color: var(--apple-gray-1); }
+:global(.action-arrow) { color: var(--apple-gray-3); transition: transform 0.2s ease, color 0.2s ease; flex-shrink: 0; }
+.action-card:hover :global(.action-arrow) { transform: translateX(3px); color: var(--apple-accent); }
 .action-primary :global(.action-arrow) { color: rgba(255,255,255,0.7); }
 .action-primary:hover :global(.action-arrow) { color: white; }
-@media (min-width: 768px) { .two-column { grid-template-columns: 1.2fr 0.8fr; } }
-@media (max-width: 640px) { 
-    .hero-content { flex-direction: column; gap: 16px; } 
-    .hero-time { text-align: left; } 
-    .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; } 
-    .stat-card { padding: 14px; }
-    .stat-icon { width: 34px; height: 34px; }
-    .stat-value { font-size: 20px; }
-    .profile-info-grid { grid-template-columns: 1fr; } 
-    .actions-grid { grid-template-columns: 1fr; } 
-}
-@media (max-width: 400px) { 
-    .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; } 
-    .stat-card { padding: 12px; gap: 8px; }
-    .stat-icon { width: 30px; height: 30px; border-radius: 8px; }
-    .stat-value { font-size: 18px; }
-    .stat-label { font-size: 10px; }
-}
 
-/* Christmas Daily Reward Section */
-.christmas-reward-section {
-    margin-bottom: 20px;
-}
+/* Christmas Section */
+.christmas-reward-section { margin-bottom: 16px; }
 
-/* See All Button Style */
-button.see-all-link {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    font-family: inherit;
-}
-
-/* Recent Activity Modal */
+/* Modal Styles */
 .modal-overlay {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -748,62 +967,42 @@ button.see-all-link {
     padding: 16px;
     animation: fadeIn 0.2s ease-out;
 }
-
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 .modal-container {
     background: var(--apple-white);
     border-radius: var(--apple-radius-xl);
     width: 100%;
-    max-width: 520px;
-    max-height: 85vh;
+    max-width: 480px;
+    max-height: 80vh;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
     animation: slideUp 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
     overflow: hidden;
 }
-
-@keyframes slideUp {
-    from { 
-        opacity: 0;
-        transform: translateY(20px) scale(0.98);
-    }
-    to { 
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-}
+@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
 .modal-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 20px 24px;
+    padding: 18px 20px;
     border-bottom: 1px solid var(--apple-gray-5);
-    background: linear-gradient(180deg, rgba(102, 126, 234, 0.05) 0%, transparent 100%);
 }
-
 .modal-title {
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-size: 18px;
+    gap: 8px;
+    font-size: 17px;
     font-weight: 600;
     color: var(--apple-black);
     margin: 0;
 }
-
-.modal-title :global(svg) {
-    color: var(--apple-accent);
-}
-
+.modal-title :global(svg) { color: var(--apple-accent); }
 .modal-close {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     border: none;
     background: var(--apple-gray-6);
@@ -814,167 +1013,70 @@ button.see-all-link {
     justify-content: center;
     transition: all 0.2s ease;
 }
-
-.modal-close:hover {
-    background: var(--apple-gray-5);
-    color: var(--apple-black);
-    transform: scale(1.05);
-}
-
-.modal-close:active {
-    transform: scale(0.95);
-}
-
-.modal-body {
-    flex: 1;
-    overflow-y: auto;
-    padding: 8px 0;
-    scrollbar-width: thin;
-    scrollbar-color: var(--apple-gray-4) transparent;
-}
-
-.modal-body::-webkit-scrollbar {
-    width: 6px;
-}
-
-.modal-body::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.modal-body::-webkit-scrollbar-thumb {
-    background: var(--apple-gray-4);
-    border-radius: 3px;
-}
-
-.modal-activity-list {
-    display: flex;
-    flex-direction: column;
-}
-
+.modal-close:hover { background: var(--apple-gray-5); color: var(--apple-black); }
+.modal-body { flex: 1; overflow-y: auto; padding: 8px 0; }
+.modal-activity-list { display: flex; flex-direction: column; }
 .modal-activity-item {
     display: flex;
-    gap: 14px;
-    padding: 16px 24px;
+    gap: 12px;
+    padding: 14px 20px;
     border-bottom: 1px solid var(--apple-gray-5);
-    transition: background 0.15s ease;
     animation: itemFadeIn 0.3s ease-out backwards;
 }
-
-@keyframes itemFadeIn {
-    from {
-        opacity: 0;
-        transform: translateX(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
-}
-
-.modal-activity-item:last-child {
-    border-bottom: none;
-}
-
-.modal-activity-item:hover {
-    background: var(--apple-gray-6);
-}
-
+@keyframes itemFadeIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+.modal-activity-item:last-child { border-bottom: none; }
+.modal-activity-item:hover { background: var(--apple-gray-6); }
 .modal-footer {
-    padding: 16px 24px;
+    padding: 14px 20px;
     border-top: 1px solid var(--apple-gray-5);
     display: flex;
     justify-content: center;
     background: var(--apple-gray-6);
 }
-
 .modal-view-all {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 12px 24px;
+    gap: 6px;
+    padding: 10px 20px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
-    border-radius: 12px;
+    border-radius: 10px;
     text-decoration: none;
     transition: all 0.2s ease;
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+.modal-view-all:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); }
+
+/* Responsive Styles */
+@media (max-width: 900px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .two-column { grid-template-columns: 1fr; }
+    .actions-grid { grid-template-columns: 1fr; }
 }
 
-.modal-view-all:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-}
-
-.modal-view-all:active {
-    transform: translateY(0);
-}
-
-/* Modal Responsive */
 @media (max-width: 640px) {
-    .modal-overlay {
-        padding: 0;
-        align-items: flex-end;
-    }
-    
-    .modal-container {
-        max-width: 100%;
-        max-height: 90vh;
-        border-radius: 24px 24px 0 0;
-        animation: slideUpMobile 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
-    }
-    
-    @keyframes slideUpMobile {
-        from { 
-            opacity: 0;
-            transform: translateY(100%);
-        }
-        to { 
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-    
-    .modal-header {
-        padding: 16px 20px;
-    }
-    
-    .modal-title {
-        font-size: 16px;
-    }
-    
-    .modal-activity-item {
-        padding: 14px 20px;
-    }
-    
-    .modal-footer {
-        padding: 16px 20px;
-        padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-    }
-    
-    .modal-view-all {
-        width: 100%;
-        justify-content: center;
-    }
+    .hero-content { flex-direction: column; gap: 14px; }
+    .hero-time { text-align: left; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .stat-card { padding: 12px; }
+    .stat-value { font-size: 20px; }
+    .chart-container { height: 120px; }
+    .chart-bar-track { height: 80px; }
+    .profile-card-compact { flex-direction: column; gap: 14px; text-align: center; }
+    .profile-left { flex-direction: column; }
+    .modal-overlay { padding: 0; align-items: flex-end; }
+    .modal-container { max-width: 100%; max-height: 85vh; border-radius: 20px 20px 0 0; }
 }
 
 @media (max-width: 400px) {
-    .modal-header {
-        padding: 14px 16px;
-    }
-    
-    .modal-activity-item {
-        padding: 12px 16px;
-        gap: 10px;
-    }
-    
-    .activity-date {
-        font-size: 13px;
-    }
-    
-    .activity-details {
-        gap: 10px;
-    }
+    .dashboard-page { padding: 12px; }
+    .hero-section { padding: 16px; }
+    .stat-card { padding: 10px; gap: 6px; }
+    .stat-icon { width: 32px; height: 32px; }
+    .stat-value { font-size: 18px; }
+    .stat-label { font-size: 10px; }
+    .chart-bar-value { font-size: 9px; }
+    .chart-bar-label { font-size: 10px; }
 }
 </style>
