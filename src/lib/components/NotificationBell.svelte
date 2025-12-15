@@ -337,7 +337,7 @@
             background: rgba(0, 0, 0, 0.5);
             backdrop-filter: blur(4px);
             -webkit-backdrop-filter: blur(4px);
-            z-index: 998;
+            z-index: 9998;
         }
     }
 
@@ -462,18 +462,18 @@
 
     /* Panel */
     .panel {
-        position: absolute;
-        top: calc(100% + 12px);
-        right: 0;
+        position: fixed;
+        top: 80px;
+        right: 24px;
         width: 380px;
-        max-height: 500px;
+        max-height: calc(100vh - 120px);
         background: white;
         border-radius: 16px;
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.05);
         display: flex;
         flex-direction: column;
         overflow: hidden;
-        z-index: 999;
+        z-index: 9999;
     }
 
     .drag-handle {
@@ -695,9 +695,18 @@
     }
 
     /* Tablet */
+    @media (max-width: 1024px) {
+        .panel {
+            right: 16px;
+            width: 360px;
+            max-height: calc(100vh - 100px);
+        }
+    }
+
     @media (max-width: 768px) {
         .panel {
             width: 340px;
+            right: 12px;
         }
 
         .bell-btn {
@@ -719,22 +728,22 @@
             left: 0;
             right: 0;
             width: 100%;
-            max-height: 80vh;
-            border-radius: 20px 20px 0 0;
-            z-index: 999;
+            max-height: 85vh;
+            border-radius: 24px 24px 0 0;
+            z-index: 9999;
         }
 
         .drag-handle {
             display: block;
-            width: 36px;
-            height: 4px;
+            width: 40px;
+            height: 5px;
             background: #d1d1d6;
-            border-radius: 2px;
-            margin: 8px auto 0;
+            border-radius: 3px;
+            margin: 10px auto 0;
         }
 
         .panel-header {
-            padding: 12px 16px 16px;
+            padding: 12px 20px 16px;
         }
 
         .close-btn {
@@ -742,7 +751,7 @@
         }
 
         .panel-content {
-            max-height: calc(80vh - 120px);
+            max-height: calc(85vh - 140px);
         }
 
         .bell-btn {
@@ -757,7 +766,13 @@
         }
 
         .notif-item {
-            padding: 14px 12px;
+            padding: 14px 16px;
+        }
+
+        .notif-icon {
+            width: 44px;
+            height: 44px;
+            font-size: 20px;
         }
     }
 
@@ -774,6 +789,10 @@
 
         .mark-read-btn {
             padding: 6px 8px;
+        }
+
+        .panel-header {
+            padding: 10px 16px 14px;
         }
     }
 </style>
