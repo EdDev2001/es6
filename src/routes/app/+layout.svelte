@@ -2,7 +2,7 @@
     import { browser } from "$app/environment";
     import { page } from "$app/stores";
     import { goto } from "$app/navigation";
-    import { onMount } from "svelte";
+    import { onMount, onDestroy } from "svelte";
     import { auth, getUserProfile } from "$lib/firebase";
     import { themeStore } from "$lib/stores/theme.js";
     import { seasonalPrefs, activeHoliday } from "$lib/stores/seasonalTheme.js";
@@ -15,6 +15,9 @@
     import HolidayBanner from "$lib/components/HolidayBanner.svelte";
     import HybridChatbot from "$lib/components/HybridChatbot.svelte";
     import { CHATBOT_ROLES } from "$lib/stores/chatbot";
+    import { startNotificationListener, stopNotificationListener } from "$lib/services/realtimeNotificationService";
+    import { initPushNotifications } from "$lib/notifications/pushNotificationService";
+    import ToastContainer from "$lib/components/ToastContainer.svelte";
 
     let user = null;
     let userProfile = null;
@@ -22,6 +25,7 @@
     let sidebarOpen = false;
     let showLoginCelebration = false;
     let showSeasonalIntro = false;
+    let notificationListenerActive = false;
 
     async function checkEmailVerification(userId) {
         try {
@@ -81,6 +85,16 @@
                         showSeasonalIntro = true;
                     }, 1500);
                 }
+                
+                // Initialize real-time push notifications for announcements
+                initPushNotifications().then(result => {
+                    if (result.success) {
+                        // Start listening for real-time notifications
+                        startNotificationListener(u.uid);
+                        notificationListenerActive = true;
+                        console.log('Real-time announcement notifications enabled');
+                    }
+                });
             } catch (error) {
                 console.error("Error loading profile:", error);
             }
@@ -89,6 +103,13 @@
         });
 
         return unsubscribe;
+    });
+    
+    // Cleanup notification listener on component destroy
+    onDestroy(() => {
+        if (notificationListenerActive && user?.uid) {
+            stopNotificationListener(user.uid);
+        }
     });
 
     async function handleLogout() {
@@ -257,6 +278,9 @@
 
 <!-- Hybrid AI Chatbot Assistant -->
 <HybridChatbot role={CHATBOT_ROLES.USER} userId={user?.uid} {userProfile} />
+
+<!-- Global Toast Notifications for Real-time Announcements -->
+<ToastContainer />
 {/if}
 
 <style>

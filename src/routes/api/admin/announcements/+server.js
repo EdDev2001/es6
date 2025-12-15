@@ -54,8 +54,9 @@ export async function GET({ request, url }) {
                 ann.publishedAt = now;
                 
                 // Send notifications for newly published scheduled announcements
+                // Real-time push to all users
                 if (ann.sendPush) {
-                    await sendPushNotifications(ann, ann.scope, ann.department);
+                    await sendPushNotifications(ann, ann.scope, ann.department, ann.id);
                 }
                 if (ann.sendEmail) {
                     await sendEmailNotifications(ann, ann.scope, ann.department);
@@ -145,9 +146,10 @@ export async function POST({ request }) {
         await newRef.set(announcement);
         
         // Send notifications if published immediately (not scheduled or draft)
+        // This triggers real-time push notifications to all users instantly
         if (status === 'published') {
             if (data.sendPush) {
-                await sendPushNotifications(announcement, data.scope, data.department);
+                await sendPushNotifications(announcement, data.scope, data.department, newRef.key);
             }
             if (data.sendEmail) {
                 await sendEmailNotifications(announcement, data.scope, data.department);
@@ -174,8 +176,8 @@ export async function POST({ request }) {
     }
 }
 
-// Helper function to send push notifications
-async function sendPushNotifications(announcement, scope, department) {
+// Helper function to send push notifications to all users in real-time
+async function sendPushNotifications(announcement, scope, department, announcementId = null) {
     try {
         if (!adminDb) return;
         
@@ -185,25 +187,45 @@ async function sendPushNotifications(announcement, scope, department) {
         
         const users = usersSnapshot.val();
         const notifications = [];
+        const now = new Date().toISOString();
+        
+        // Determine notification type based on priority
+        const isEmergency = scope === 'emergency' || announcement.priority === 'urgent';
+        const notificationType = isEmergency ? 'emergency_alert' : 'announcement';
         
         for (const [userId, user] of Object.entries(users)) {
             // Filter by department if scope is department
             if (scope === 'department' && department && user.department !== department) continue;
             
-            // Create notification for user
+            // Filter by target audience if specified
+            if (announcement.targetAudience?.length > 0) {
+                const userRole = user.role || 'student';
+                if (!announcement.targetAudience.includes(userRole) && !announcement.targetAudience.includes('all')) {
+                    continue;
+                }
+            }
+            
+            // Create notification for user - this triggers real-time push via Firebase listeners
             const notifRef = adminDb.ref(`notifications/${userId}`).push();
             notifications.push(notifRef.set({
-                type: scope === 'emergency' ? 'emergency_alert' : 'announcement',
+                type: notificationType,
                 title: announcement.title,
-                body: announcement.content.substring(0, 100),
-                announcementId: announcement.id,
+                body: announcement.content?.substring(0, 150) || '',
+                content: announcement.content,
+                announcementId: announcementId || announcement.id,
                 priority: announcement.priority,
+                category: announcement.category,
+                imageUrl: announcement.imageUrl || null,
                 read: false,
-                createdAt: new Date().toISOString()
+                createdAt: now,
+                // Additional metadata for rich notifications
+                requireAcknowledgment: announcement.requireAcknowledgment || false,
+                expiresAt: announcement.expiresAt || null
             }));
         }
         
         await Promise.all(notifications);
+        console.log(`Push notifications sent to ${notifications.length} users for announcement: ${announcement.title}`);
     } catch (error) {
         console.error('Push notification error:', error);
     }

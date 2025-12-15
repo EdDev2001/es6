@@ -11,7 +11,10 @@ import {
   orderByChild as dbOrderByChild,
   equalTo as dbEqualTo,
   update as dbUpdate,
-  limitToLast as dbLimitToLast
+  limitToLast as dbLimitToLast,
+  onValue as dbOnValue,
+  onChildAdded as dbOnChildAdded,
+  off as dbOff
 } from 'firebase/database';
 import {
   getAuth,
@@ -83,6 +86,9 @@ export const orderByChild = browser ? dbOrderByChild : () => { throw new Error('
 export const equalTo = browser ? dbEqualTo : () => { throw new Error('Database not available on server'); };
 export const update = browser ? dbUpdate : () => { throw new Error('Database not available on server'); };
 export const limitToLast = browser ? dbLimitToLast : () => { throw new Error('Database not available on server'); };
+export const onValue = browser ? dbOnValue : () => { throw new Error('Database not available on server'); };
+export const onChildAdded = browser ? dbOnChildAdded : () => { throw new Error('Database not available on server'); };
+export const off = browser ? dbOff : () => { throw new Error('Database not available on server'); };
 
 export const USER_PROFILE_PATH = 'users';
 
