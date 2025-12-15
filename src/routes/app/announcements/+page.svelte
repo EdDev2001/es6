@@ -1,7 +1,7 @@
 <script>
     import { onMount } from 'svelte';
     import { browser } from '$app/environment';
-    import { auth, db, ref, onValue, update, get } from '$lib/firebase';
+    import { auth, db, ref, onValue, update } from '$lib/firebase';
     import { fly, fade, scale } from 'svelte/transition';
     import { format, formatDistanceToNow } from 'date-fns';
     import {
@@ -21,7 +21,6 @@
 
     let user = null;
     let notifications = [];
-    let announcements = [];
     let isLoading = true;
     let selectedItem = null;
     let showDetailModal = false;
@@ -43,46 +42,32 @@
         notificationPermission = getNotificationPermission();
         showPermissionBanner = notificationPermission === 'default';
 
-        // Load notifications
+        // Load notifications (which include announcements sent to this user)
         loadNotifications();
-
-        // Load announcements
-        loadAnnouncements();
     });
 
     function loadNotifications() {
         if (!db || !user) return;
 
         const notifRef = ref(db, `notifications/${user.uid}`);
-        onValue(notifRef, (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                notifications = Object.entries(data)
-                    .map(([id, notif]) => ({ id, ...notif, source: 'notification' }))
-                    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-            } else {
-                notifications = [];
-            }
-            isLoading = false;
-        });
-    }
-
-    async function loadAnnouncements() {
-        if (!db || !user) return;
-
-        try {
-            const announcementsRef = ref(db, 'announcements');
-            const snapshot = await get(announcementsRef);
-            if (snapshot.exists()) {
+        onValue(
+            notifRef,
+            (snapshot) => {
                 const data = snapshot.val();
-                announcements = Object.entries(data)
-                    .map(([id, ann]) => ({ id, ...ann, source: 'announcement' }))
-                    .filter((a) => a.status === 'published')
-                    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+                if (data) {
+                    notifications = Object.entries(data)
+                        .map(([id, notif]) => ({ id, ...notif }))
+                        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+                } else {
+                    notifications = [];
+                }
+                isLoading = false;
+            },
+            (error) => {
+                console.error('Error loading notifications:', error);
+                isLoading = false;
             }
-        } catch (error) {
-            console.error('Error loading announcements:', error);
-        }
+        );
     }
 
     async function enableNotifications() {

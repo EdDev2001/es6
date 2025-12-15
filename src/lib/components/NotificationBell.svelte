@@ -313,7 +313,7 @@
 
             {#if notifications.length > 5}
                 <div class="panel-footer">
-                    <a href="/app/notifications" class="view-all" on:click={closePanel}>
+                    <a href="/app/announcements" class="view-all" on:click={closePanel}>
                         View All
                         <IconChevronRight size={16} />
                     </a>
