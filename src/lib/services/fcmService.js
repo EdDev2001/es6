@@ -10,7 +10,7 @@ let fcmInitialized = false;
 
 // Your Firebase VAPID key (Web Push certificate key pair)
 // Get this from Firebase Console > Project Settings > Cloud Messaging > Web Push certificates
-const VAPID_KEY = import.meta.env.PUBLIC_FIREBASE_VAPID_KEY || '';
+const VAPID_KEY = import.meta.env.PUBLIC_FIREBASE_VAPID_KEY || 'BAYUKAMEt6j2bRIwU9IAYZz_5HJdvopgDQ1WlcNb3zgDq0gZXAwRDUtK3uAYfNRxfx3rcGSBeAvjR_b4Mit5wXc';
 
 /**
  * Initialize FCM and get permission
